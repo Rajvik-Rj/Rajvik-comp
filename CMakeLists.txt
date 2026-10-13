@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(RajvikDynamicsPro VERSION 0.2.0 LANGUAGES CXX)
+project(RajvikDynamicsPro VERSION 0.2.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -38,7 +38,7 @@ juce_add_plugin(RajvikDynamicsPro
     AU_MAIN_TYPE kAudioUnitType_Effect
 )
 
-# Generate JuceHeader.h for source files that include the standard JUCE umbrella header.
+# Generate the JUCE umbrella header used by plugin source files.
 juce_generate_juce_header(RajvikDynamicsPro)
 
 target_sources(RajvikDynamicsPro PRIVATE
