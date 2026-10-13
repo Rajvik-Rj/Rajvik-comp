@@ -1,0 +1,19 @@
+name: build
+on: [push, pull_request]
+jobs:
+  build:
+    strategy:
+      matrix: { os: [windows-latest, macos-latest] }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+      - run: cmake --build build --config Release --parallel
+      - run: ctest --test-dir build -C Release --output-on-failure
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RajvikDynamicsPro-${{ matrix.os }}
+          path: |
+            build/RajvikDynamicsPro_artefacts/Release/VST3
+            build/RajvikDynamicsPro_artefacts/Release/CLAP
+            build/RajvikDynamicsPro_artefacts/Release/AU
