@@ -38,6 +38,9 @@ juce_add_plugin(RajvikDynamicsPro
     AU_MAIN_TYPE kAudioUnitType_Effect
 )
 
+# Generate JuceHeader.h for source files that include the standard JUCE umbrella header.
+juce_generate_juce_header(RajvikDynamicsPro)
+
 target_sources(RajvikDynamicsPro PRIVATE
     Source/PluginProcessor.cpp
     Source/PluginProcessor.h
