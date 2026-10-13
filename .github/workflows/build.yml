@@ -15,5 +15,3 @@ jobs:
           name: RajvikDynamicsPro-${{ matrix.os }}
           path: |
             build/RajvikDynamicsPro_artefacts/Release/VST3
-            build/RajvikDynamicsPro_artefacts/Release/CLAP
-            build/RajvikDynamicsPro_artefacts/Release/AU
