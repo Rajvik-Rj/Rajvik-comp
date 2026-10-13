@@ -29,7 +29,17 @@ jobs:
 
     steps:
       - name: Checkout source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
+
+      # JUCE 8.0.10's CMake support can fail under CMake 4.x with
+      # "Missing variable is CMAKE_C_COMPILE_OBJECT". Keep CI on CMake 3.31.6.
+      - name: Set up compatible CMake
+        uses: jwlawson/actions-setup-cmake@v2
+        with:
+          cmake-version: '3.31.6'
+
+      - name: Show toolchain versions
+        run: cmake --version
 
       - name: Install Linux build dependencies
         if: runner.os == 'Linux'
@@ -39,9 +49,11 @@ jobs:
             build-essential cmake ninja-build pkg-config \
             libasound2-dev libjack-jackd2-dev \
             libfreetype6-dev libfontconfig1-dev libgtk-3-dev \
-            libx11-dev libxcomposite-dev libxcursor-dev libxext-dev \
+            libx11-dev libx11-xcb-dev libxcb1-dev \
+            libxcomposite-dev libxcursor-dev libxext-dev \
             libxinerama-dev libxrandr-dev libxrender-dev \
-            libxkbcommon-dev libglu1-mesa-dev mesa-common-dev
+            libxkbcommon-dev libxkbcommon-x11-dev \
+            libglu1-mesa-dev mesa-common-dev
 
       - name: Configure project
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DJUCE_BUILD_EXTRAS=OFF -DJUCE_BUILD_EXAMPLES=OFF
