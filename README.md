@@ -1,73 +1,67 @@
-# RAJVIK DYNAMICS PRO
+# RAJVIK Dynamics Pro — GitHub Build Project
 
-Cross-platform JUCE audio-plugin starter project for GitHub Actions.
+An original JUCE/C++ compressor plugin project with an automated GitHub Actions workflow. Upload this repository to GitHub and it will attempt to build a VST3 plugin for Windows, macOS and Linux, plus an AU component on macOS.
 
-## What this repository builds
+> **Important:** this is an original compressor inspired by common professional compressor workflows. It does not contain FabFilter's proprietary source code or reproduce its exact sound. The styles below are original approximations and should be auditioned and tuned against real audio before production use.
 
-- Windows: VST3
-- macOS: VST3 and Audio Unit (AU)
-- Linux: VST3
-- A basic working stereo compressor with Threshold, Ratio, Attack, Release, and Mix controls.
-- A simple custom dark UI.
-- GitHub Actions automatically builds artifacts for all three operating systems.
+## What is implemented in this version
 
-This is a reliable starting foundation, not the complete 14-mode feature set from the design brief yet. Add features incrementally and test each one.
+- 14 selectable compressor styles: Clean, Classic, Opto, Vocal, Mastering, Bus, Punch, Pumping, Versatile, Smooth, Upward, TTM-style upward/downward, Op-El-style and Vari-Mu-style.
+- Real-time stereo compression DSP with threshold, ratio, attack, release, soft knee, range limit, hold, lookahead and parallel mix.
+- Internal or host-routed external sidechain input. The DAW must enable and route the sidechain bus for External to work.
+- Peak and RMS detector choices, stereo-link amount, input and output gain.
+- Auto-release, adaptive auto-threshold, approximate auto makeup gain, and selectable Tube/Diode/Bright nonlinear coloration.
+- Sidechain detector shaping with HPF, LPF and six adjustable parametric bell bands. Drag each coloured node in the sidechain EQ graph to change its frequency and gain; each band has a Q parameter available for host automation.
+- Real signal-scope traces, threshold/transfer curve, input/output peak meters and a gain-reduction readout.
+- Factory starting presets, parameter save/restore, A/B snapshot save/compare and Reset.
+- GitHub Actions build jobs for Windows VST3, macOS VST3 + AU, and Linux VST3.
 
-## Important requirements
+## Not implemented yet
 
-- GitHub account and a repository created from these files.
-- No local C++ compiler is required if you use GitHub Actions.
-- JUCE is downloaded by CMake during the build, so the runner needs internet access.
-- This starter uses JUCE's current public CMake workflow. Check JUCE licensing before distributing a commercial product.
+This is a more functional first DSP version, **not a full Pro-C 3 replacement**. It does not yet implement multi-band compression, TTM cross-band dynamics, per-band Mid/Side EQ, a true-peak/loudness meter suite, 32x oversampling, tempo-synced triggering, Dolby Atmos / 9.1.6, full MIDI Learn, undo/redo history, or commercial plug-in validation. Auto Gain is a simplified makeup estimate, not a loudness-matching system. Saturation is not yet oversampled, so use moderate Drive and check high-frequency artifacts.
 
-## Upload to GitHub
+## Build it on GitHub without installing a compiler on your PC
 
-1. Extract this ZIP.
-2. Create a new empty GitHub repository, for example `rajvik-dynamics-pro`.
-3. Upload the *contents* of this folder to the repository root (the `.github` folder must also be included).
-4. Commit the files to the `main` branch.
-5. Open **Actions** and enable workflows if GitHub asks.
-6. Open the **Build Audio Plugins** workflow and choose **Run workflow**, or push a new commit.
-7. Wait for Windows, macOS, and Linux jobs to finish.
-8. Open the completed workflow run and download the artifacts at the bottom.
+1. Download and extract this ZIP.
+2. Create an empty repository at [github.com/new](https://github.com/new), for example `rajvik-dynamics-pro`.
+3. Upload the **contents** of the extracted folder to the repository root. Include the hidden `.github/workflows/build.yml` file.
+4. Commit to `main` (or `master`). GitHub Actions should start automatically. If prompted, enable Actions.
+5. Open the **Actions** tab, select **Build RAJVIK Dynamics Pro**, and open the latest run.
+6. Wait for each platform job to succeed. Download the artifact ZIP shown at the bottom of that completed run.
 
-## Installing the builds
+The workflow downloads JUCE during CI, so GitHub runners need network access. This workspace has no network access to GitHub, so the actual CI build must be validated by running the workflow on GitHub; the ZIP itself is source code, not precompiled plugin binaries.
 
-- **Windows:** extract the Windows artifact and copy `RAJVIK Dynamics Pro.vst3` to `%COMMONPROGRAMFILES%\\VST3` (normally `C:\\Program Files\\Common Files\\VST3`). Some DAWs can scan a custom folder.
-- **macOS:** extract the macOS artifact. Copy the `.vst3` bundle to `~/Library/Audio/Plug-Ins/VST3` or `/Library/Audio/Plug-Ins/VST3`. The `.component` bundle is the AU build for compatible DAWs. Unsigned builds may require additional macOS security steps.
-- **Linux:** extract the Linux artifact and copy the `.vst3` bundle to `~/.vst3` or `~/.vst3/` as appropriate for your DAW.
+## Install the resulting bundles
 
-Restart/rescan plugins in your DAW after installing. The host and plugin architecture must match (for example, Apple Silicon vs Intel).
+- **Windows VST3:** copy `RAJVIK Dynamics Pro.vst3` into `C:\Program Files\Common Files\VST3` (or the VST3 folder your DAW scans).
+- **macOS VST3:** copy the `.vst3` bundle into `~/Library/Audio/Plug-Ins/VST3`.
+- **macOS AU:** copy the `.component` bundle into `~/Library/Audio/Plug-Ins/Components`.
+- **Linux VST3:** copy the `.vst3` bundle into `~/.vst3` or your DAW's configured VST3 folder.
 
-## Build locally (optional)
+Restart/rescan plugins in your DAW. The macOS workflow builds for the architecture provided by its runner; a universal Intel + Apple Silicon package is not currently configured. Unsigned macOS plugin bundles may require local security approval.
 
-Requires CMake, a C++17 compiler, and platform dependencies described by JUCE.
+## Local build (optional)
+
+Requirements: a C++17 compiler, CMake 3.22+, platform audio/UI development dependencies, and Internet access for JUCE download.
 
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build --config Release --target "RAJVIK Dynamics Pro_VST3"
+cmake --build build --config Release --target RajvikDynamicsPro_VST3
 ```
 
-On macOS, the AU target is also generated.
+On macOS, also build `RajvikDynamicsPro_AU`.
 
-## Current implementation
-
-- Stereo audio processing.
-- Threshold, Ratio, Attack, Release, Mix.
-- Input/output gain-reduction metering is intentionally minimal in this first scaffold.
-- Preset, sidechain EQ, 14 compression styles, oversampling, surround, MIDI learn, and advanced metering are not implemented yet.
-
-## Repository structure
+## Source layout
 
 ```text
-.
-├── .github/workflows/build.yml
-├── CMakeLists.txt
-├── README.md
-├── Source/
-│   ├── PluginProcessor.h
-│   ├── PluginProcessor.cpp
-│   ├── PluginEditor.h
-│   └── PluginEditor.cpp
-└── LICENSE
+.github/workflows/build.yml   # cross-platform GitHub Actions
+CMakeLists.txt                # JUCE plugin and formats
+Source/PluginProcessor.h      # processor interface and DSP state
+Source/PluginProcessor.cpp    # compressor, detector, sidechain EQ, coloration
+Source/PluginEditor.h         # controls and interactive editor interface
+Source/PluginEditor.cpp       # dark GUI, compressor view, EQ graph, presets
 ```
+
+## License note
+
+JUCE has its own licensing terms. Review them before distributing a commercial product. This repository's license applies to the project code written for this scaffold, not JUCE or third-party dependencies.

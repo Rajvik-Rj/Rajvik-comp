@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(RajvikDynamicsPro VERSION 0.1.0 LANGUAGES CXX)
+project(RajvikDynamicsPro VERSION 0.2.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -15,6 +15,11 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(JUCE)
 
+set(RAJVIK_PLUGIN_FORMATS VST3 Standalone)
+if(APPLE)
+    list(APPEND RAJVIK_PLUGIN_FORMATS AU)
+endif()
+
 juce_add_plugin(RajvikDynamicsPro
     COMPANY_NAME "RAJVIK"
     BUNDLE_ID "com.rajvik.dynamicspro"
@@ -22,7 +27,7 @@ juce_add_plugin(RajvikDynamicsPro
     PLUGIN_CODE Rjdp
     PRODUCT_NAME "RAJVIK Dynamics Pro"
     DESCRIPTION "RAJVIK Dynamics Pro Compressor"
-    FORMATS VST3 AU Standalone
+    FORMATS ${RAJVIK_PLUGIN_FORMATS}
     IS_SYNTH FALSE
     NEEDS_MIDI_INPUT FALSE
     NEEDS_MIDI_OUTPUT FALSE
