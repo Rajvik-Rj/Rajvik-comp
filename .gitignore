@@ -1,8 +1,0 @@
-/build/
-cmake-build-*/
-.DS_Store
-*.user
-*.suo
-*.vcxproj.user
-.vscode/
-.idea/
