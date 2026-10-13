@@ -1,29 +1,48 @@
 name: build
+
 on:
   push:
   pull_request:
 
-# Do not cancel a build just because another commit is pushed while it is compiling.
-concurrency:
-  group: rdp-vst3-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
-
+# Intentionally no concurrency cancellation group: independent runs must not
+# cancel one another while JUCE is compiling.
 jobs:
   build:
-    timeout-minutes: 45
+    name: VST3 (${{ matrix.os }})
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
         os: [windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out source
+        uses: actions/checkout@v4
+
       - name: Configure VST3-only build
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DRDP_BUILD_PLUGIN=ON
-      - name: Build VST3
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DRDP_BUILD_PLUGIN=ON
+
+      - name: Build VST3 (Windows)
+        if: runner.os == 'Windows'
         run: cmake --build build --config Release --parallel 2
+
+      - name: Build VST3 (macOS)
+        if: runner.os == 'macOS'
+        run: cmake --build build --config Release --parallel 2
+
       - name: Run DSP tests
         run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Verify VST3 artifact exists
+        shell: bash
+        run: |
+          if [ ! -d "build/RajvikDynamicsPro_artefacts/Release/VST3" ]; then
+            echo "VST3 output directory was not created."
+            find build -maxdepth 7 -iname '*vst3*' -print || true
+            exit 1
+          fi
+          find "build/RajvikDynamicsPro_artefacts/Release/VST3" -maxdepth 4 -print
+
       - name: Upload VST3 artifact
         uses: actions/upload-artifact@v4
         with:
