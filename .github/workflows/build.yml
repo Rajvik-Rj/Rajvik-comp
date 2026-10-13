@@ -2,7 +2,7 @@ name: Build RAJVIK Dynamics Pro
 
 on:
   push:
-    branches: [main, master]
+    branches: [ main, master ]
   pull_request:
   workflow_dispatch:
 
@@ -40,8 +40,8 @@ jobs:
             libasound2-dev libjack-jackd2-dev \
             libfreetype6-dev libfontconfig1-dev libgtk-3-dev \
             libx11-dev libxcomposite-dev libxcursor-dev libxext-dev \
-            libxinerama-dev libxrandr-dev libxrender-dev libxkbcommon-dev \
-            libglu1-mesa-dev mesa-common-dev
+            libxinerama-dev libxrandr-dev libxrender-dev \
+            libxkbcommon-dev libglu1-mesa-dev mesa-common-dev
 
       - name: Configure project
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DJUCE_BUILD_EXTRAS=OFF -DJUCE_BUILD_EXAMPLES=OFF
@@ -62,14 +62,14 @@ jobs:
             find build -type d -name '*.component' -prune -exec cp -R '{}' package/ \;
           fi
           if [ -z "$(find package -mindepth 1 -maxdepth 1 -print -quit)" ]; then
-            echo 'No plugin bundle found. Build output:'
+            echo 'No plugin bundle found. Full build tree:'
             find build -maxdepth 7 -print | head -250
             exit 1
           fi
-          echo 'Collected plugin bundles:'
+          echo 'Plugin bundles collected:'
           ls -lah package
 
-      - name: Upload plugin artifacts
+      - name: Upload plugins
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
