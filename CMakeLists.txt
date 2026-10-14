@@ -16,19 +16,36 @@ target_include_directories(DspTests PRIVATE Source/DSP)
 add_test(NAME DspTests COMMAND DspTests)
 
 # --- JUCE plugin (disable with -DRDP_BUILD_PLUGIN=OFF to build tests only) ---
+# Keep the primary build deterministic: VST3 only by default. Optional formats
+# are enabled explicitly by separate CI configure steps.
 option(RDP_BUILD_PLUGIN "Build the JUCE plugin" ON)
+option(RDP_BUILD_CLAP "Build CLAP via clap-juce-extensions" OFF)
+option(RDP_BUILD_AU "Build Audio Unit (macOS only)" OFF)
+option(RDP_BUILD_STANDALONE "Build a standalone app" OFF)
 if(RDP_BUILD_PLUGIN)
   include(FetchContent)
-  FetchContent_Declare(JUCE GIT_REPOSITORY https://github.com/juce-framework/JUCE.git GIT_TAG 8.0.6 GIT_SHALLOW ON)
+  set(JUCE_BUILD_EXTRAS OFF CACHE BOOL "" FORCE)
+  set(JUCE_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+  FetchContent_Declare(JUCE
+    GIT_REPOSITORY https://github.com/juce-framework/JUCE.git
+    GIT_TAG 8.0.15
+    GIT_SHALLOW TRUE)
   FetchContent_MakeAvailable(JUCE)
 
-  option(RDP_BUILD_CLAP "Build CLAP via clap-juce-extensions" ON)
-  set(RDP_FORMATS VST3 Standalone)
-  if(APPLE)
-    list(APPEND RDP_FORMATS AU)   # Audio Unit (macOS only)
+  set(RDP_FORMATS VST3)
+  if(RDP_BUILD_STANDALONE)
+    list(APPEND RDP_FORMATS Standalone)
+  endif()
+  if(APPLE AND RDP_BUILD_AU)
+    list(APPEND RDP_FORMATS AU)
   endif()
   if(RDP_BUILD_CLAP)
-    FetchContent_Declare(clap-juce-extensions GIT_REPOSITORY https://github.com/free-audio/clap-juce-extensions.git GIT_TAG main)
+    set(CLAP_JUCE_EXTENSIONS_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    FetchContent_Declare(clap-juce-extensions
+      GIT_REPOSITORY https://github.com/free-audio/clap-juce-extensions.git
+      GIT_TAG main
+      GIT_SHALLOW TRUE
+      GIT_SUBMODULES_RECURSE TRUE)
     FetchContent_MakeAvailable(clap-juce-extensions)
   endif()
 
