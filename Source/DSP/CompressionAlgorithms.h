@@ -1,31 +1,42 @@
 #pragma once
 #include "GainComputer.h"
 namespace rdp {
+
+// One entry per Style. Every field changes how the sound behaves, not just a label:
+//   attackMul / releaseMul   scale the user's Attack / Release (fast stage of the release)
+//   kneeAdd                  extra soft knee added on top of the Knee control
+//   rmsMs, rmsMix            detector: RMS window (0 = pure peak) and RMS share of the detector signal (rest = peak)
+//   feedback                 detector listens to the already-compressed signal (gentler, program-dependent behaviour)
+//   slewRelease              constant dB/s release (rhythmic pumping)
+//   variMu                   ratio rises as gain reduction deepens (soft, "tube-like" onset)
+//   adaptive                 attack / release follow the crest factor of the material (fast on transients, slow on dense parts)
+//   slowMul, slowAmt         two-stage release: slow stage = Release x slowMul, blended in (up to slowAmt) as sustained
+//                            gain reduction builds up (short peaks recover fast, long compression recovers slowly)
 struct ModeProfile {
     const char* name; const char* description;
-    float attackMul, releaseMul, kneeAdd, rmsMs;   // rmsMs 0 = peak detector
-    bool feedback;      // detector sees the already-compressed level
-    float progDep;      // program-dependent release depth
-    bool slewRelease;   // constant dB/s release (pumping)
-    bool variMu;        // ratio rises with gain reduction
+    float attackMul, releaseMul, kneeAdd;
+    float rmsMs, rmsMix;
+    bool feedback, slewRelease, variMu, adaptive;
+    float slowMul, slowAmt;
     Kind kind; float holdMs;
     float defThr, defRatio, defAtk, defRel, defKnee;
 };
 inline constexpr int kNumModes = 14;
 inline const ModeProfile kModes[kNumModes] = {
- {"Clean",     "Transparent, low-distortion feed-forward",        1.0f,1.0f, 3,  5, false,0.3f,false,false,Kind::Downward,  0, -18,3,  10,120, 6},
- {"Classic",   "Peak, feedback topology, general purpose",         1.0f,1.0f, 0,  0, true, 0.0f,false,false,Kind::Downward,  0, -20,4,   5,100, 2},
- {"Opto",      "Smooth, strongly program-dependent release",       2.0f,1.0f,12, 25, false,1.5f,false,false,Kind::Downward,  0, -24,3,  20,300,18},
- {"Vocal",     "Controlled dynamics, smooth recovery",             0.8f,1.0f, 8, 10, false,1.0f,false,false,Kind::Downward,  0, -22,4,   8,150,10},
- {"Mastering", "Slow, transparent, low artifact",                  1.5f,1.2f,12, 30, false,0.8f,false,false,Kind::Downward,  0, -14,2,  30,250,16},
- {"Bus",       "Cohesive RMS feedback glue",                       1.2f,1.0f, 6, 20, true, 0.6f,false,false,Kind::Downward,  0, -16,2,  30,200, 8},
- {"Punch",     "Delayed attack lets transients through",           3.0f,0.7f, 2,  0, false,0.0f,false,false,Kind::Downward,  0, -20,5,  15, 80, 4},
- {"Pumping",   "Constant-slope release with hold, rhythmic",       0.5f,1.0f, 0,  0, false,0.0f,true, false,Kind::Downward, 30, -26,8,   2,180, 0},
- {"Versatile", "Adaptive general purpose",                         1.0f,1.0f, 6,  8, false,1.0f,false,false,Kind::Downward,  0, -18,3,  12,150, 8},
- {"Smooth",    "Very soft knee, slow and gentle",                  1.5f,1.3f,24, 40, false,0.5f,false,false,Kind::Downward,  0, -18,2.5f,25,250,24},
- {"Upward",    "Raises material below threshold",                  1.0f,1.5f,12, 15, false,0.0f,false,false,Kind::Upward,    0, -40,2,  20,200,12},
- {"TTM",       "Downward above threshold + upward 24 dB below",    1.0f,1.2f, 8, 10, false,0.5f,false,false,Kind::Combined,  0, -20,3,  15,180, 8},
- {"Op-El",     "Opto/electro feedback hybrid",                     1.5f,1.0f,14, 20, true, 1.2f,false,false,Kind::Downward,  0, -22,3,  15,250,14},
- {"Vari-Mu",   "Ratio increases with gain reduction",              1.8f,1.4f,20, 15, true, 0.8f,false,true, Kind::Downward,  0, -20,3,  25,300,20},
+ //  name        description                                         atk  rel  knee  rms  mix   fb     slew   vari   adapt  slowM slowA kind              hold   thr  ratio atk  rel  knee
+ {"Clean",     "Transparent, low-distortion feed-forward",         1.0f,1.0f, 3.f,  5.f,0.5f, false,false,false,false, 3.0f,0.25f,Kind::Downward,  0.f, -18.f,3.f,  10.f,120.f, 4.f},
+ {"Classic",   "Peak, feedback topology, general purpose",         1.0f,1.0f, 0.f,  0.f,0.0f, true, false,false,false, 0.0f,0.00f,Kind::Downward,  0.f, -20.f,4.f,   5.f,100.f, 2.f},
+ {"Opto",      "Smooth, strongly program-dependent release",       2.0f,0.3f,12.f, 25.f,1.0f, false,false,false,false, 6.0f,1.00f,Kind::Downward,  0.f, -24.f,3.f,  20.f,300.f, 6.f},
+ {"Vocal",     "Controlled dynamics, smooth recovery",             0.8f,1.0f, 8.f, 10.f,0.5f, false,false,false,false, 3.5f,0.55f,Kind::Downward,  0.f, -22.f,4.f,   8.f,150.f, 6.f},
+ {"Mastering", "Slow, transparent, low artifact",                  1.5f,1.2f,10.f, 30.f,0.7f, false,false,false,false, 3.0f,0.50f,Kind::Downward,  0.f, -14.f,2.f,  30.f,250.f, 6.f},
+ {"Bus",       "Cohesive RMS feedback glue",                       1.2f,1.0f, 6.f, 20.f,1.0f, true, false,false,false, 3.0f,0.50f,Kind::Downward,  0.f, -16.f,2.f,  30.f,200.f, 4.f},
+ {"Punch",     "Delayed attack lets transients through",           3.0f,0.7f, 2.f,  0.f,0.0f, false,false,false,false, 0.0f,0.00f,Kind::Downward,  0.f, -20.f,5.f,  15.f, 80.f, 2.f},
+ {"Pumping",   "Constant-slope release with hold, rhythmic",       0.5f,1.0f, 0.f,  0.f,0.0f, false,true, false,false, 0.0f,0.00f,Kind::Downward, 30.f, -26.f,8.f,   2.f,180.f, 0.f},
+ {"Versatile", "Adaptive general purpose",                         1.0f,1.0f, 4.f,  8.f,0.5f, false,false,false,true,  2.5f,0.40f,Kind::Downward,  0.f, -18.f,3.f,  12.f,150.f, 6.f},
+ {"Smooth",    "Very soft knee, slow and gentle",                  1.5f,1.3f,16.f, 40.f,1.0f, false,false,false,false, 2.5f,0.40f,Kind::Downward,  0.f, -18.f,2.5f, 25.f,250.f,12.f},
+ {"Upward",    "Raises material below threshold",                  1.0f,1.5f, 8.f, 15.f,1.0f, false,false,false,false, 2.0f,0.30f,Kind::Upward,    0.f, -40.f,2.f,  20.f,200.f, 8.f},
+ {"TTM",       "Downward above threshold + upward 24 dB below",    1.0f,1.2f, 6.f, 10.f,0.6f, false,false,false,false, 2.5f,0.40f,Kind::Combined,  0.f, -20.f,3.f,  15.f,180.f, 6.f},
+ {"Op-El",     "Opto/electro feedback hybrid",                     1.5f,0.6f,10.f, 20.f,0.8f, true, false,false,false, 4.0f,0.70f,Kind::Downward,  0.f, -22.f,3.f,  15.f,250.f, 6.f},
+ {"Vari-Mu",   "Ratio increases with gain reduction",              1.8f,1.0f,12.f, 15.f,0.6f, true, false,true, false, 3.0f,0.50f,Kind::Downward,  0.f, -20.f,3.f,  25.f,300.f, 8.f},
 };
 } // namespace rdp
