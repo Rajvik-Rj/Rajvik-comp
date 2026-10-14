@@ -13,8 +13,18 @@ private:
     void rebuildPresetMenu(); void promptSave(); void stepPreset(int dir);
     void applyModeLayout(); void bindMainKnobs(); void bindBandControls(); void onBandSelected(); void onEqSelected();
     void setEqType(int kind); void showSettings(); void showHelp(); void setScalePercent(int pct);
-    float k() const { return (float) getWidth() / 1536.f; }
-    juce::Rectangle<int> Ri(float x, float y, float w, float h) const { return juce::Rectangle<float>(x * k(), y * k(), w * k(), h * k()).toNearestInt(); }
+    // The whole UI is laid out on a 1536 x 1024 canvas that is scaled to FIT the window and centred, so no control can ever be cut off
+    // (whatever size / aspect ratio the host gives us).
+    float k() const { return std::max(0.2f, std::min((float) getWidth() / 1536.f, (float) getHeight() / 1024.f)); }
+    float ox() const { return ((float) getWidth() - 1536.f * k()) * 0.5f; }
+    float oy() const { return ((float) getHeight() - 1024.f * k()) * 0.5f; }
+    juce::Rectangle<int> Ri(float x, float y, float w, float h) const { return juce::Rectangle<float>(ox() + x * k(), oy() + y * k(), w * k(), h * k()).toNearestInt(); }
+    // ComboBox that remembers that the *user* opened it (so style defaults are applied only for a manual pick, never for preset / automation changes)
+    struct ModeCombo : juce::ComboBox {
+        juce::int64 lastShow = 0;
+        void showPopup() override { lastShow = juce::Time::currentTimeMillis(); juce::ComboBox::showPopup(); }
+        bool userPicked() const { return lastShow != 0 && juce::Time::currentTimeMillis() - lastShow < 1500; }
+    };
     void place(KnobBox& kb, juce::Rectangle<float> cell, const KnobGeom& g);
 
     RajvikProcessor& proc; RajvikLnF lnf;
@@ -25,7 +35,7 @@ private:
     ui::TextLinkButton abBtn{ "A / B" }, copyBtn{ "Copy" }, helpBtn{ "Help" };
     juce::ComboBox presetBox;
     // display panel
-    juce::ComboBox modeBox; juce::Label modeDesc; juce::TextButton singleBtn{ "Single" }, multiBtn{ "Multiband" };
+    ModeCombo modeBox; juce::Label modeDesc; juce::TextButton singleBtn{ "Single" }, multiBtn{ "Multiband" };
     DisplayComponent display; MultibandDisplay mbDisplay; MeterStrip meter;
     juce::TextButton bandBtn[4]; juce::TextButton soloBtn{ "S" }, muteBtn{ "M" }, bypBtn{ "Byp" };
     juce::ComboBox bandsBox; juce::Slider bandGain{ juce::Slider::LinearHorizontal, juce::Slider::TextBoxRight };

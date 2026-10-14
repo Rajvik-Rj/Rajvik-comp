@@ -44,7 +44,7 @@ bool RajvikProcessor::isBusesLayoutSupported(const BusesLayout& l) const
 void RajvikProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
     sr = sampleRate; maxBlock = std::max(samplesPerBlock, 32);
-    engine.prepare(sr); mb.prepare(sr); eq.prepare(sr); sat.prepare(); meter.prepare(sr);
+    engine.prepare(sr); mb.prepare(sr); eq.prepare(sr); sat.prepare(sr); meter.prepare(sr);
     const int maxLook = (int) std::ceil(sr * 0.020) + 2;
     for (int c = 0; c < 2; ++c) { lookDelay[c].prepare(maxLook); dryDelay[c].prepare(2048); wetDelay[c].prepare(2048); }
     wet.setSize(2, maxBlock); dry.setSize(2, maxBlock);
@@ -94,7 +94,8 @@ void RajvikProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     eq.setParams(sp);
 
     chrIdx = (int) *prm.chr; sat.setParams(chrIdx, *prm.drive);
-    osIdx = (int) *prm.os - 1; osLatNow = osIdx >= 0 ? osLat[(size_t) osIdx] : 0;
+    osIdx = (int) *prm.os - 1;
+    osLatNow = osIdx >= 0 ? osLat[(size_t) osIdx] : 0;
     if (osIdx != lastOs) { if (osIdx >= 0) os[(size_t) osIdx]->reset(); lastOs = osIdx; }
     lookS = (int) std::lround(*prm.look * 0.001 * sr);
     const int totalLat = lookS + osLatNow;
@@ -156,7 +157,8 @@ void RajvikProcessor::processChunk(juce::AudioBuffer<float>& main, int start, in
         const float ig = inSm.getNextValue();
         float x[2] = { 0, 0 }, src[2] = { 0, 0 }, det[2] = { 0, 0 }, g[2] = { 1, 1 }, d[2] = { 0, 0 }, w[2] = { 0, 0 };
         for (int c = 0; c < nCh; ++c) {
-            x[c] = main.getReadPointer(c)[start + i] * ig;
+            const float raw = main.getReadPointer(c)[start + i];
+            x[c] = (std::isfinite(raw) ? raw : 0.f) * ig;   // a NaN / Inf from the host must never reach the (recursive) filters
             inPk = std::max(inPk, std::fabs(x[c]));
             src[c] = extSc ? sc[std::min(c, scCh - 1)][start + i] : x[c];
         }
@@ -268,10 +270,19 @@ void RajvikProcessor::syncMidiMap()
 
 void RajvikProcessor::applyModeDefaults()
 {
-    const auto& m = kModes[std::clamp((int) *prm.mode, 0, kNumModes - 1)];
-    auto set = [&](const char* id, float v) { if (auto* p = apvts.getParameter(id)) p->setValueNotifyingHost(p->convertTo0to1(v)); };
-    undo.beginNewTransaction("Mode defaults");
-    set("threshold", m.defThr); set("ratio", m.defRatio); set("attack", m.defAtk); set("release", m.defRel); set("knee", m.defKnee);
+    int idx = 0; if (auto* mp = dynamic_cast<juce::AudioParameterChoice*>(apvts.getParameter("mode"))) idx = mp->getIndex();
+    const auto& m = kModes[std::clamp(idx, 0, kNumModes - 1)];
+    auto set = [&](const juce::String& id, float v) { if (auto* p = apvts.getParameter(id)) p->setValueNotifyingHost(p->convertTo0to1(v)); };
+    undo.beginNewTransaction("Style defaults");
+    set("knee", m.defKnee);
+    if (*prm.mbOn > 0.5f) {   // multiband: every band gets the style's threshold / ratio, attack + release keep their low-to-high character
+        static const float atkF[4] = { 3.f, 1.5f, 0.8f, 0.4f }, relF[4] = { 1.7f, 1.25f, 0.9f, 0.65f };
+        for (int b = 0; b < 4; ++b) {
+            const auto n = juce::String(b + 1);
+            set("mbThr" + n, m.defThr); set("mbRatio" + n, m.defRatio);
+            set("mbAtk" + n, std::clamp(m.defAtk * atkF[b] / 1.5f, 0.01f, 500.f)); set("mbRel" + n, std::clamp(m.defRel * relF[b] / 1.25f, 1.f, 5000.f));
+        }
+    } else { set("threshold", m.defThr); set("ratio", m.defRatio); set("attack", m.defAtk); set("release", m.defRel); }
 }
 
 void RajvikProcessor::toggleAB()

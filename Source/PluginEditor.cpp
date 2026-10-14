@@ -76,6 +76,7 @@ RajvikEditor::RajvikEditor(RajvikProcessor& p)
     for (int i = 0; i < rdp::kNumModes; ++i) modeBox.addItem(rdp::kModes[i].name, i + 1);
     modeA = std::make_unique<SA::ComboBoxAttachment>(a, "mode", modeBox);
     modeBox.setColour(juce::ComboBox::textColourId, ui::accent);
+    modeBox.onChange = [this] { if (modeBox.userPicked()) { modeBox.lastShow = 0; proc.applyModeDefaults(); } };   // picking a style loads its characteristic settings
     modeDesc.setColour(juce::Label::textColourId, ui::text.withAlpha(0.85f));
     singleBtn.onClick = [this] { ui::gesture(proc.apvts, "mbOn", true); ui::setP(proc.apvts, "mbOn", 0.f); ui::gesture(proc.apvts, "mbOn", false); };
     multiBtn.onClick = [this] { ui::gesture(proc.apvts, "mbOn", true); ui::setP(proc.apvts, "mbOn", 1.f); ui::gesture(proc.apvts, "mbOn", false); };
@@ -91,7 +92,7 @@ RajvikEditor::RajvikEditor(RajvikProcessor& p)
     autoGainBtn.getProperties().set("style", "pill"); autoRelBtn.getProperties().set("style", "dot");
     agA = std::make_unique<SA::ButtonAttachment>(a, "autoGain", autoGainBtn); arA = std::make_unique<SA::ButtonAttachment>(a, "autoRelease", autoRelBtn);
     ui::fillCombo(stereoBox, a, "stereoMode"); stereoA = std::make_unique<SA::ComboBoxAttachment>(a, "stereoMode", stereoBox);
-    linkSl.setTextBoxStyle(juce::Slider::TextBoxRight, false, 44, 18); linkA = std::make_unique<SA::SliderAttachment>(a, "link", linkSl);
+    linkSl.setTextBoxStyle(juce::Slider::TextBoxRight, false, 52, 18); linkA = std::make_unique<SA::SliderAttachment>(a, "link", linkSl);
     for (auto* b : { &peakBtn, &rmsBtn }) b->setClickingTogglesState(false);
     peakBtn.onClick = [this] { const bool on = ui::getP(proc.apvts, "detector") == 1.f; ui::gesture(proc.apvts, "detector", true); ui::setP(proc.apvts, "detector", on ? 0.f : 1.f); ui::gesture(proc.apvts, "detector", false); };
     rmsBtn.onClick = [this] { const bool on = ui::getP(proc.apvts, "detector") == 2.f; ui::gesture(proc.apvts, "detector", true); ui::setP(proc.apvts, "detector", on ? 0.f : 2.f); ui::gesture(proc.apvts, "detector", false); };
@@ -134,7 +135,7 @@ RajvikEditor::RajvikEditor(RajvikProcessor& p)
     meter.onReset = [this] { proc.meterReset = true; };
     proc.metersWanted = true;
 
-    setResizable(true, true); setResizeLimits(768, 512, 2304, 1536); getConstrainer()->setFixedAspectRatio(1536.0 / 1024.0);
+    setResizable(true, true); setResizeLimits(640, 427, 2304, 1536); getConstrainer()->setFixedAspectRatio(1536.0 / 1024.0);
     setSize(1152, 768);
     mbShown = ui::getP(a, "mbOn") > 0.5f; applyModeLayout(); onEqSelected();
     startTimerHz(30);
@@ -228,7 +229,9 @@ void RajvikEditor::showHelp()
         "SIDECHAIN EQ: drag nodes (freq / gain), mouse wheel on a node = Q, double-click a node = band on/off. "
         "Table: drag freq / gain values, click power to toggle, click the curve icon to change filter type.\n\n"
         "OUT read-out (top right): click to cycle Peak / True-peak / RMS / LUFS M-S-I. Click elsewhere on the meters to reset.\n"
-        "Gear (bottom right): Character, Drive, Tempo Sync, preset and state actions.", "OK", this);
+        "Gear (bottom right): Character, Drive, Tempo Sync, preset and state actions.\n\n"
+        "STYLE: picking a style from the menu loads its characteristic Threshold / Ratio / Attack / Release / Knee (use Gear > Mode defaults to reload them). "
+        "Opto, Vocal, Mastering, Bus, Op-El, Vari-Mu and Smooth use a program-dependent two-stage release; Versatile adapts to the material.", "OK", this);
 }
 
 void RajvikEditor::timerCallback()
@@ -248,60 +251,65 @@ void RajvikEditor::timerCallback()
     osItem.setInfo("Oversampling: " + juce::String(osn[(int) ui::getP(a, "oversampling")])); lookItem.setInfo("Lookahead: " + juce::String(ui::getP(a, "lookahead"), 1) + " ms");
     mixItem.setInfo("Mix: " + juce::String(juce::roundToInt(ui::getP(a, "mix"))) + " %");
     outItem.setInfo("Output: " + (meter.outHold <= -99.f ? juce::String("--") : juce::String(meter.outHold, 1)) + " dB");
-    scaleItem.setInfo("Scale: " + juce::String(juce::roundToInt((float) getWidth() / 1152.f * 100.f)) + " %");
+    scaleItem.setInfo("Scale: " + juce::String(juce::roundToInt(k() * 1536.f / 1152.f * 100.f)) + " %");
 }
 
 void RajvikEditor::place(KnobBox& kb, juce::Rectangle<float> cell, const KnobGeom& g)
 {
-    kb.setBounds(Ri(cell.getX(), cell.getY(), cell.getWidth(), cell.getHeight())); kb.setGeom(g, cell.getTopLeft());
+    kb.setBounds(Ri(cell.getX(), cell.getY(), cell.getWidth(), cell.getHeight())); kb.setGeom(g, cell.getTopLeft(), k());
 }
 
 void RajvikEditor::paint(juce::Graphics& g)
 {
-    const float s = k();
+    const float s = k(), X0 = ox(), Y0 = oy();
     g.setGradientFill(juce::ColourGradient(ui::bgTop, 0.f, 0.f, ui::bg, 0.f, (float) getHeight(), false)); g.fillAll();
-    auto R = [&](float x, float y, float w, float h) { return juce::Rectangle<float>(x * s, y * s, w * s, h * s); };
+    auto R = [&](float x, float y, float w, float h) { return juce::Rectangle<float>(X0 + x * s, Y0 + y * s, w * s, h * s); };
     auto box = [&](juce::Rectangle<float> r, float rad = 10.f) { g.setColour(ui::panel); g.fillRoundedRectangle(r, rad * s); g.setColour(ui::panelEdge); g.drawRoundedRectangle(r.reduced(0.5f), rad * s, 1.f); };
+    // text: x = left / centre / right anchor (by justification), cy = vertical centre, everything measured and shrunk to its width so nothing overlaps
     auto txt = [&](const juce::String& t, float x, float cy, float size, juce::Colour c, juce::Justification j, bool bold = false, float kern = 0.f, float w = 400.f) {
-        g.setFont(ui::font(size * s, bold, kern)); g.setColour(c);
-        const float ww = w * s, left = j == juce::Justification::centredLeft ? x * s : (j == juce::Justification::centredRight ? x * s - ww : x * s - ww * 0.5f);
-        g.drawText(t, juce::Rectangle<float>(left, cy * s - size * s, ww, size * s * 2.f), j); };
-    const auto L = juce::Justification::centredLeft; const auto C = juce::Justification::centred;
+        g.setFont(ui::fitFont(t, size * s, w * s, bold, kern)); g.setColour(c);
+        const float ww = w * s, left = j == juce::Justification::centredLeft ? X0 + x * s : (j == juce::Justification::centredRight ? X0 + x * s - ww : X0 + x * s - ww * 0.5f);
+        g.drawText(t, juce::Rectangle<float>(left, Y0 + cy * s - size * s, ww, size * s * 2.f), j); };
+    const auto L = juce::Justification::centredLeft;
 
-    // header
+    // header: logo + title laid out from the measured text widths (no overlap with any font)
     ui::drawIcon(g, "logo", R(34, 20, 48, 32), ui::accent, 2.6f * s);
-    txt("RAJVIK", 100, 38, 37, ui::text, L, true, 0.34f); txt("DYNAMICS", 271, 28, 24, ui::text, L, false, 0.20f); txt("PRO", 395, 28, 24, ui::accent, L, true, 0.20f);
-    txt("ADVANCED DYNAMICS PROCESSOR", 271, 48, 13, ui::dim, L, false, 0.12f);
-    g.setColour(ui::panelEdge); for (float x : { 250.f, 917.f, 1445.f }) g.drawLine(x * s, 14.f * s, x * s, 54.f * s, 1.f);
+    {
+        const auto fR = ui::font(30.f * s, true, 0.14f); juce::GlyphArrangement ga; ga.addLineOfText(fR, "RAJVIK", 0.f, 0.f);
+        const float wR = ga.getBoundingBox(0, -1, true).getWidth() / s, x2 = 96.f + wR + 20.f;
+        txt("RAJVIK", 96, 36, 30, ui::text, L, true, 0.14f, wR + 8.f);
+        const auto fD = ui::font(19.f * s, false, 0.12f); juce::GlyphArrangement gb; gb.addLineOfText(fD, "DYNAMICS", 0.f, 0.f);
+        const float wD = gb.getBoundingBox(0, -1, true).getWidth() / s;
+        txt("DYNAMICS", x2, 28, 19, ui::text, L, false, 0.12f, wD + 8.f); txt("PRO", x2 + wD + 10.f, 28, 19, ui::accent, L, true, 0.12f, 70.f);
+        txt("ADVANCED DYNAMICS PROCESSOR", x2, 49, 11, ui::dim, L, false, 0.08f, std::max(120.f, 610.f - x2));
+    }
+    g.setColour(ui::panelEdge); for (float x : { 917.f, 1445.f }) g.drawLine(X0 + x * s, Y0 + 14.f * s, X0 + x * s, Y0 + 54.f * s, 1.f);
 
     // main display + meter panels
     box(R(18, 80, 1304, 360)); box(R(1340, 80, 180, 360));
-    txt("Style", 40, 100, 17, ui::text, L);
+    txt("Style", 40, 100, 16, ui::text, L, false, 0.f, 46.f);
 
     // knob row
     box(R(18, 458, 1326, 217)); g.setColour(ui::panelEdge);
-    for (float x : { 160.f, 498.f, 996.f }) g.drawLine(x * s, 472.f * s, x * s, 662.f * s, 1.f);
-    g.drawRoundedRectangle(R(1036, 466, 134, 34), 17.f * s, 1.f);
-    for (float y : { 535.f, 603.f }) { g.drawLine(1028.f * s, y * s, 1038.f * s, y * s, 1.f); }
-    for (float y : { 607.f, 659.f }) { g.drawLine(1196.f * s, y * s, 1208.f * s, y * s, 1.f); }
+    for (float x : { 152.f, 912.f }) g.drawLine(X0 + x * s, Y0 + 472.f * s, X0 + x * s, Y0 + 662.f * s, 1.f);
     box(R(1362, 460, 158, 215));
-    ui::drawIcon(g, "link", R(1380, 472, 28, 28), ui::text.withAlpha(0.85f), 1.5f * s); txt("Stereo Link", 1416, 486, 15, ui::text.withAlpha(0.9f), L);
-    g.setColour(ui::panelEdge); g.drawLine(1378.f * s, 563.f * s, 1506.f * s, 563.f * s, 1.f);
-    txt("Detector", 1380, 586, 15, ui::text.withAlpha(0.9f), L);
-    txt("Link", 1380, 556, 12, ui::dim, L, false, 0.f, 40.f);
+    ui::drawIcon(g, "link", R(1378, 470, 26, 26), ui::text.withAlpha(0.85f), 1.5f * s); txt("Stereo Link", 1410, 484, 14, ui::text.withAlpha(0.9f), L, false, 0.f, 104.f);
+    g.setColour(ui::panelEdge); g.drawLine(X0 + 1378.f * s, Y0 + 568.f * s, X0 + 1506.f * s, Y0 + 568.f * s, 1.f);
+    txt("Detector", 1380, 588, 14, ui::text.withAlpha(0.9f), L, false, 0.f, 110.f);
+    txt("Link", 1380, 548, 12, ui::dim, L, false, 0.f, 30.f);
 
     // sidechain & EQ
     const float scH = scOpen ? 262.f : 46.f; box(R(18, 688, 1502, scH));
     if (scOpen) {
         box(R(995, 730, 338, 206)); box(R(1363, 730, 157, 206));
-        txt("Source", 36, 746, 14, ui::dim, L); txt("Routing", 36, 794, 14, ui::dim, L);
-        txt("Sidechain EQ", 1377, 751, 14, ui::dim, L); txt("M / S", 1377, 814, 14, ui::dim, L); txt("Oversampling", 1377, 884, 14, ui::dim, L);
+        txt("Source", 36, 746, 13, ui::dim, L, false, 0.f, 120.f); txt("Routing", 36, 794, 13, ui::dim, L, false, 0.f, 120.f);
+        txt("Sidechain EQ", 1377, 751, 13, ui::dim, L, false, 0.f, 130.f); txt("M / S", 1377, 814, 13, ui::dim, L, false, 0.f, 100.f); txt("Oversampling", 1377, 884, 13, ui::dim, L, false, 0.f, 130.f);
         g.setColour(ui::fieldEdge); g.drawRoundedRectangle(R(994, 696, 114, 30), 6.f * s, 1.f);
-        txt("EQ band type", 1114, 711, 12, ui::faint, L, false, 0.f, 90.f);
+        txt("EQ band type", 1114, 711, 11, ui::faint, L, false, 0.f, 90.f);
     }
-    // bottom bar
-    g.setColour(juce::Colour(0xff0a0e16)); g.fillRect(R(0, 960, 1536, 64)); g.setColour(ui::panelEdge); g.drawLine(0.f, 960.f * s, (float) getWidth(), 960.f * s, 1.f);
-    if (mbShown) txt("Gain", 636, 419, 14, ui::dim, L, false, 0.f, 40.f);
+    // bottom bar (spans the full window width, also in the letterbox margins)
+    g.setColour(juce::Colour(0xff0a0e16)); g.fillRect(0.f, Y0 + 960.f * s, (float) getWidth(), (float) getHeight() - (Y0 + 960.f * s)); g.setColour(ui::panelEdge); g.drawLine(0.f, Y0 + 960.f * s, (float) getWidth(), Y0 + 960.f * s, 1.f);
+    if (mbShown) txt("Gain", 636, 419, 13, ui::dim, L, false, 0.f, 40.f);
 }
 
 void RajvikEditor::resized()
@@ -317,28 +325,30 @@ void RajvikEditor::resized()
     display.setBounds(Ri(30, 118, 1282, 320)); mbDisplay.setBounds(Ri(30, 118, 1282, 320)); meter.setBounds(Ri(1340, 80, 180, 360));
     for (int i = 0; i < 4; ++i) bandBtn[i].setBounds(Ri(70.f + (float) i * 72.f, 406, 68, 26));
     soloBtn.setBounds(Ri(364, 406, 40, 26)); muteBtn.setBounds(Ri(408, 406, 40, 26)); bypBtn.setBounds(Ri(452, 406, 52, 26)); bandsBox.setBounds(Ri(516, 406, 104, 26)); bandGain.setBounds(Ri(676, 406, 240, 26));
-    // knob row (design coordinates from the reference image)
-    auto G = [](float cx, float cy, float r, const char* cap, float capX, float capY, float capSize, float valX, float valY, float valSize, const char* lo, float loX, float loY, const char* hi, float hiX, float hiY) {
-        KnobGeom g; g.cx = cx; g.cy = cy; g.r = r; g.cap = cap; g.capX = capX; g.capY = capY; g.capSize = capSize; g.valX = valX; g.valY = valY; g.valSize = valSize; g.valW = 150.f; g.valH = 26.f;
-        g.lo = lo; g.loX = loX; g.loY = loY; g.hi = hi; g.hiX = hiX; g.hiY = hiY; return g; };
-    place(inG, { 30, 466, 124, 170 }, G(92, 530, 46, "IN GAIN", 92, 594, 15, 92, 617, 16, "-24", 52, 576, "+24", 131, 576));
-    place(thr, { 176, 462, 146, 196 }, G(249, 527, 66, "THRESHOLD", 249, 611, 15, 249, 636, 20, "-60", 196, 591, "0", 304, 591));
-    place(ratio, { 340, 470, 148, 188 }, G(414, 533, 56, "RATIO", 414, 611, 15, 414, 636, 17, "1:1", 364, 585, "100:1", 463, 585));
-    place(atk, { 506, 470, 148, 188 }, G(580, 533, 56, "ATTACK", 580, 611, 15, 580, 636, 17, "0.01", 528, 584, "500", 632, 584));
-    place(rel, { 676, 470, 148, 188 }, G(750, 533, 56, "RELEASE", 750, 611, 15, 750, 636, 17, "1", 700, 584, "5000", 803, 583));
-    place(mix, { 838, 470, 148, 188 }, G(912, 533, 56, "MIX", 912, 611, 15, 912, 636, 17, "0", 869, 584, "100", 957, 584));
-    {   // output gain: no value box, the value replaces the caption while dragging
-        KnobGeom g; g.cx = 1256; g.cy = 505; g.r = 41; g.cap = "OUTPUT GAIN"; g.capX = 1256; g.capY = 560; g.capSize = 14; g.valW = 0; g.valueOnDrag = true;
-        g.lo = "-24"; g.loX = 1213; g.loY = 537; g.hi = "+24"; g.hiX = 1303; g.hiY = 537; place(outG, { 1180, 462, 152, 112 }, g); }
-    auto Sd = [](float cx, float cy, float r, const char* cap, float capY, float boxCx, float boxY, float boxW) {
-        KnobGeom g; g.cx = cx; g.cy = cy; g.r = r; g.cap = cap; g.capX = cx + 31.f; g.capY = capY; g.capSize = 14; g.capLeft = true; g.valX = boxCx; g.valY = boxY; g.valW = boxW; g.valH = 22; g.valSize = 13; g.valBox = true; return g; };
-    place(knee, { 1030, 508, 128, 64 }, Sd(1058, 535, 19, "Knee", 527, 1114, 555, 52));
-    place(range, { 1030, 576, 128, 64 }, Sd(1058, 603, 19, "Range", 595, 1114, 623, 52));
-    place(hold, { 1198, 586, 128, 50 }, Sd(1227, 607, 18, "Hold", 600, 1288, 621, 66));
-    place(look, { 1198, 636, 128, 46 }, Sd(1228, 659, 14, "Lookahead", 641, 1288, 661, 66));
-    autoGainBtn.setBounds(Ri(1042, 470, 124, 26)); autoRelBtn.setBounds(Ri(686, 642, 124, 22));
-    stereoBox.setBounds(Ri(1378, 506, 129, 28)); linkSl.setBounds(Ri(1412, 540, 96, 18));
-    peakBtn.setBounds(Ri(1380, 604, 62, 30)); rmsBtn.setBounds(Ri(1444, 604, 62, 30));
+    // knob row: smaller knobs, every label / read-out inside its own cell
+    auto Mk = [](float cx, float cy, float r, const char* cap, const char* lo, const char* hi) {
+        KnobGeom g; g.cx = cx; g.cy = cy; g.r = r; g.cap = cap; g.capX = cx; g.capY = 602; g.capSize = 14; g.capW = 136;
+        g.valX = cx; g.valY = 632; g.valW = 100; g.valH = 26; g.valSize = 15; g.valBox = true;
+        g.lo = lo; g.loX = cx - r * 0.82f; g.loY = 578; g.hi = hi; g.hiX = cx + r * 0.82f; g.hiY = 578; return g; };
+    place(inG,  { 12,  466, 148, 202 }, Mk(86,  522, 34, "IN GAIN",   "-24",  "+24"));
+    place(thr,  { 160, 466, 152, 202 }, Mk(236, 522, 50, "THRESHOLD", "-60",  "0"));
+    place(ratio,{ 322, 466, 148, 202 }, Mk(396, 522, 42, "RATIO",     "1:1",  "100:1"));
+    place(atk,  { 466, 466, 148, 202 }, Mk(540, 522, 42, "ATTACK",    "0.01", "500"));
+    place(rel,  { 610, 466, 148, 202 }, Mk(684, 522, 42, "RELEASE",   "1",    "5000"));
+    place(mix,  { 754, 466, 148, 202 }, Mk(828, 522, 42, "MIX",       "0",    "100"));
+    {   // output gain
+        KnobGeom g = Mk(1252, 530, 38, "OUTPUT GAIN", "-24", "+24"); g.capY = 606; g.valY = 634; g.valW = 84; g.loY = g.hiY = 584; g.loX = 1252 - 32; g.hiX = 1252 + 32; g.capW = 130;
+        place(outG, { 1180, 466, 156, 202 }, g); }
+    auto Sd = [](float cx, float cy, float r) {   // small knob: caption + value box to its right
+        KnobGeom g; g.cx = cx; g.cy = cy; g.r = r; g.capX = cx + r + 10.f; g.capY = cy - 9.f; g.capSize = 13; g.capW = 96; g.capLeft = true;
+        g.valX = cx + r + 10.f + 36.f; g.valY = cy + 13.f; g.valW = 72; g.valH = 22; g.valSize = 13; g.valBox = true; return g; };
+    { auto g = Sd(968, 530, 17); g.cap = "Knee"; place(knee, { 922, 502, 160, 56 }, g); }
+    { auto g = Sd(968, 582, 17); g.cap = "Range"; place(range, { 922, 554, 160, 56 }, g); }
+    { auto g = Sd(968, 634, 17); g.cap = "Hold"; place(hold, { 922, 606, 160, 56 }, g); }
+    { auto g = Sd(1112, 530, 17); g.cap = "Lookahead"; place(look, { 1066, 502, 160, 56 }, g); }
+    autoGainBtn.setBounds(Ri(932, 470, 132, 26)); autoRelBtn.setBounds(Ri(620, 646, 128, 22));
+    stereoBox.setBounds(Ri(1378, 502, 129, 28)); linkSl.setBounds(Ri(1404, 536, 104, 22));
+    peakBtn.setBounds(Ri(1380, 606, 62, 30)); rmsBtn.setBounds(Ri(1444, 606, 62, 30));
 
     // sidechain & EQ
     scOnBtn.setBounds(Ri(30, 696, 200, 28)); chevBtn.setBounds(Ri(222, 696, 28, 28)); eqBandsBox.setBounds(Ri(876, 697, 108, 26));
@@ -347,7 +357,7 @@ void RajvikEditor::resized()
         c->setVisible(scOpen);
     srcBox.setBounds(Ri(36, 757, 186, 26)); routeBox.setBounds(Ri(36, 805, 186, 26));
     {   KnobGeom g; g.cx = 68; g.cy = 884; g.r = 22; g.cap = "Sidechain Level"; g.capX = 36; g.capY = 846; g.capSize = 14; g.capLeft = true; g.valX = 128; g.valY = 880; g.valW = 46; g.valH = 22; g.valSize = 13; g.valBox = true;
-        g.lo = "-24"; g.loX = 38; g.loY = 910; g.hi = "+24"; g.hiX = 118; g.hiY = 910; scLevel.setBounds(Ri(28, 836, 150, 86)); scLevel.setGeom(g, { 28, 836 }); }
+        g.lo = "-24"; g.loX = 38; g.loY = 910; g.hi = "+24"; g.hiX = 118; g.hiY = 910; scLevel.setBounds(Ri(28, 836, 150, 86)); scLevel.setGeom(g, { 28, 836 }, k()); }
     listenBtn.setBounds(Ri(36, 924, 93, 24)); invertBtn.setBounds(Ri(140, 924, 84, 24));
     eqGraph.setBounds(Ri(258, 735, 718, 205)); eqTable.setBounds(Ri(995, 730, 338, 206));
     eqModeBox.setBounds(Ri(1377, 766, 127, 28)); midBtn.setBounds(Ri(1377, 830, 62, 26)); sideBtn.setBounds(Ri(1442, 830, 62, 26)); osBox.setBounds(Ri(1377, 897, 127, 28));
