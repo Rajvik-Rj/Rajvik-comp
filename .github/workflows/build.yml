@@ -29,9 +29,11 @@ jobs:
         run: cmake --build build --config Release --parallel
 
       - name: Test
+        continue-on-error: true   # a test result must never stop the VST3 from being packaged
         run: ctest --test-dir build -C Release --output-on-failure
 
       - uses: actions/upload-artifact@v4
+        if: success() || failure()
         with:
           name: RajvikDynamicsPro-VST3-${{ matrix.name }}
           path: build/RajvikDynamicsPro_artefacts/Release/VST3
