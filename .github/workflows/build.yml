@@ -1,237 +1,37 @@
-name: RAJVIK Dynamics Pro - Plugin Builds
-
-on:
-  push:
-    branches: [main, master]
-  pull_request:
-  workflow_dispatch:
-
-permissions:
-  contents: read
-
+name: build
+on: [push, pull_request, workflow_dispatch]
 jobs:
   build:
-    name: ${{ matrix.label }}
-    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - label: Windows - VST3 first
-            os: windows-latest
-            artifact: rajvik-dynamics-pro-windows-vst3
-          - label: macOS - VST3 first
-            os: macos-latest
-            artifact: rajvik-dynamics-pro-macos-vst3
-          - label: Linux - VST3 first
-            os: ubuntu-22.04
-            artifact: rajvik-dynamics-pro-linux-vst3
-
+          - { os: windows-latest, name: Windows }
+          - { os: macos-latest,   name: macOS }
+          - { os: ubuntu-latest,  name: Linux }
+    runs-on: ${{ matrix.os }}
+    name: build (${{ matrix.name }})
     steps:
-      - name: Checkout source
-        uses: actions/checkout@v7
+      - uses: actions/checkout@v4
 
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
-        shell: bash
         run: |
-          set -euxo pipefail
           sudo apt-get update
-          sudo apt-get install -y \
-            build-essential cmake ninja-build pkg-config git libxml2-utils \
-            libasound2-dev libjack-jackd2-dev \
-            libfreetype6-dev libfontconfig1-dev libgtk-3-dev \
-            libx11-dev libxcomposite-dev libxcursor-dev libxext-dev \
-            libxinerama-dev libxrandr-dev libxrender-dev \
-            libxkbcommon-dev libglu1-mesa-dev mesa-common-dev
+          sudo apt-get install -y libasound2-dev libjack-jackd2-dev libfreetype-dev \
+            libfontconfig1-dev libx11-dev libxcomposite-dev libxcursor-dev libxext-dev \
+            libxinerama-dev libxrandr-dev libxrender-dev libgl1-mesa-dev libcurl4-openssl-dev
 
-      # Do not configure the CLAP extension in the primary build. This prevents
-      # optional CLAP dependencies/submodules from stopping VST3 generation.
-      - name: Configure VST3-only build
-        shell: bash
-        run: |
-          set -euo pipefail
-          cmake -S . -B build-vst3 \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DRDP_BUILD_PLUGIN=ON \
-            -DRDP_BUILD_CLAP=OFF \
-            -DRDP_BUILD_AU=OFF \
-            -DRDP_BUILD_STANDALONE=OFF \
-            -DJUCE_BUILD_EXTRAS=OFF \
-            -DJUCE_BUILD_EXAMPLES=OFF \
-            2>&1 | tee configure-vst3.log
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
 
-      - name: Build VST3 plugin
-        shell: bash
-        run: |
-          set -euo pipefail
-          cmake --build build-vst3 --config Release --target RajvikDynamicsPro_VST3 --parallel 2 --verbose \
-            2>&1 | tee build-vst3.log
+      - name: Build
+        run: cmake --build build --config Release --parallel
 
-      - name: Collect VST3 bundle
-        id: collect_vst3
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p package-vst3
-          found=false
-          while IFS= read -r -d '' bundle; do
-            cp -R "$bundle" package-vst3/
-            found=true
-          done < <(find build-vst3 -type d -name '*.vst3' -prune -print0)
-          if [[ "$found" != true ]]; then
-            echo 'ERROR: VST3 target completed but no .vst3 bundle was found.'
-            find build-vst3 -maxdepth 9 -print | head -400
-            exit 1
-          fi
-          find package-vst3 -maxdepth 5 -print
-          echo 'found=true' >> "$GITHUB_OUTPUT"
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
 
-      - name: Upload VST3 artifact
-        if: steps.collect_vst3.outputs.found == 'true'
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}
-          path: package-vst3/
-          if-no-files-found: error
-          retention-days: 14
-
-      - name: Build DSP tests
-        if: always()
-        continue-on-error: true
-        shell: bash
-        run: |
-          set -euo pipefail
-          cmake --build build-vst3 --config Release --target DspTests --parallel 2 --verbose \
-            2>&1 | tee build-tests.log
-          ctest --test-dir build-vst3 -C Release --output-on-failure \
-            2>&1 | tee test-results.log
-
-      # Optional CLAP uses a separate build directory, so a CLAP configuration
-      # or compilation issue cannot prevent a VST3 artifact from being uploaded.
-      - name: Configure optional CLAP build
-        if: always()
-        id: configure_clap
-        continue-on-error: true
-        shell: bash
-        run: |
-          set -euo pipefail
-          cmake -S . -B build-clap \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DRDP_BUILD_PLUGIN=ON \
-            -DRDP_BUILD_CLAP=ON \
-            -DRDP_BUILD_AU=OFF \
-            -DRDP_BUILD_STANDALONE=OFF \
-            -DJUCE_BUILD_EXTRAS=OFF \
-            -DJUCE_BUILD_EXAMPLES=OFF \
-            2>&1 | tee configure-clap.log
-
-      - name: Build optional CLAP plugin
-        if: steps.configure_clap.outcome == 'success'
-        continue-on-error: true
-        shell: bash
-        run: |
-          set -euo pipefail
-          cmake --build build-clap --config Release --target RajvikDynamicsPro_CLAP --parallel 2 --verbose \
-            2>&1 | tee build-clap.log
-
-      - name: Collect optional CLAP bundle
-        if: always()
-        id: collect_clap
-        shell: bash
-        run: |
-          mkdir -p package-clap
-          found=false
-          if [[ -d build-clap ]]; then
-            while IFS= read -r -d '' bundle; do
-              cp -R "$bundle" package-clap/
-              found=true
-            done < <(find build-clap -type d -name '*.clap' -prune -print0 2>/dev/null || true)
-          fi
-          echo "found=$found" >> "$GITHUB_OUTPUT"
-          find package-clap -maxdepth 5 -print || true
-
-      - name: Upload optional CLAP artifact
-        if: steps.collect_clap.outputs.found == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: rajvik-dynamics-pro-${{ runner.os }}-clap
-          path: package-clap/
-          if-no-files-found: error
-          retention-days: 14
-
-      - name: Configure optional AU build
-        if: runner.os == 'macOS'
-        continue-on-error: true
-        shell: bash
-        run: |
-          set -euo pipefail
-          cmake -S . -B build-au \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DRDP_BUILD_PLUGIN=ON \
-            -DRDP_BUILD_CLAP=OFF \
-            -DRDP_BUILD_AU=ON \
-            -DRDP_BUILD_STANDALONE=OFF \
-            -DJUCE_BUILD_EXTRAS=OFF \
-            -DJUCE_BUILD_EXAMPLES=OFF \
-            2>&1 | tee configure-au.log
-
-      - name: Build optional AU
-        if: runner.os == 'macOS'
-        continue-on-error: true
-        shell: bash
-        run: |
-          set -euo pipefail
-          cmake --build build-au --config Release --target RajvikDynamicsPro_AU --parallel 2 --verbose \
-            2>&1 | tee build-au.log
-
-      - name: Collect optional AU
-        if: always() && runner.os == 'macOS'
-        id: collect_au
-        shell: bash
-        run: |
-          mkdir -p package-au
-          found=false
-          if [[ -d build-au ]]; then
-            while IFS= read -r -d '' bundle; do
-              cp -R "$bundle" package-au/
-              found=true
-            done < <(find build-au -type d -name '*.component' -prune -print0 2>/dev/null || true)
-          fi
-          echo "found=$found" >> "$GITHUB_OUTPUT"
-          if [[ "$found" != true ]]; then
-            echo 'No AU bundle found; VST3 result is unaffected.'
-          fi
-          find package-au -maxdepth 5 -print || true
-
-      - name: Upload AU artifact
-        if: runner.os == 'macOS' && steps.collect_au.outputs.found == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: rajvik-dynamics-pro-macos-au
-          path: package-au/
-          if-no-files-found: error
-          retention-days: 14
-
-      - name: Upload build diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-diagnostics-${{ runner.os }}
-          path: |
-            configure-vst3.log
-            build-vst3.log
-            configure-clap.log
-            build-clap.log
-            configure-au.log
-            build-au.log
-            build-tests.log
-            test-results.log
-            build-vst3/CMakeCache.txt
-            build-vst3/CMakeFiles/CMakeConfigureLog.yaml
-            build-clap/CMakeCache.txt
-            build-clap/CMakeFiles/CMakeConfigureLog.yaml
-            build-au/CMakeCache.txt
-            build-au/CMakeFiles/CMakeConfigureLog.yaml
-          if-no-files-found: ignore
-          retention-days: 14
+          name: RajvikDynamicsPro-VST3-${{ matrix.name }}
+          path: build/RajvikDynamicsPro_artefacts/Release/VST3
