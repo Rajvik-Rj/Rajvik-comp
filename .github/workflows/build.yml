@@ -1,19 +1,79 @@
-name: build
-on: [push, pull_request]
+name: Build RAJVIK Dynamics Pro
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
 jobs:
   build:
-    strategy:
-      matrix: { os: [windows-latest, macos-latest] }
+    name: ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Windows VST3 + CLAP
+            os: windows-latest
+            artifact: rajvik-dynamics-pro-windows
+          - label: macOS VST3 + CLAP + AU
+            os: macos-latest
+            artifact: rajvik-dynamics-pro-macos
+          - label: Linux VST3 + CLAP
+            os: ubuntu-22.04
+            artifact: rajvik-dynamics-pro-linux
     steps:
-      - uses: actions/checkout@v4
-      - run: cmake -B build -DCMAKE_BUILD_TYPE=Release
-      - run: cmake --build build --config Release --parallel
-      - run: ctest --test-dir build -C Release --output-on-failure
-      - uses: actions/upload-artifact@v4
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake ninja-build pkg-config git \
+            libasound2-dev libjack-jackd2-dev \
+            libfreetype6-dev libfontconfig1-dev libgtk-3-dev \
+            libx11-dev libxcomposite-dev libxcursor-dev libxext-dev \
+            libxinerama-dev libxrandr-dev libxrender-dev \
+            libxkbcommon-dev libglu1-mesa-dev mesa-common-dev
+
+      - name: Configure project
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DJUCE_BUILD_EXTRAS=OFF -DJUCE_BUILD_EXAMPLES=OFF -DRDP_BUILD_CLAP=ON
+
+      - name: Build plugin formats
+        run: cmake --build build --config Release --parallel 2
+
+      - name: Run DSP tests
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Collect plugin bundles
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p package
+          find build -type d -name '*.vst3' -prune -exec cp -R '{}' package/ \;
+          find build -name '*.clap' -exec cp -R '{}' package/ \;
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            find build -type d -name '*.component' -prune -exec cp -R '{}' package/ \;
+          fi
+          if ! find package -mindepth 1 -maxdepth 1 -print -quit | grep -q .; then
+            echo 'ERROR: No plugin bundles were found in the build output.'
+            echo 'Build tree for diagnosis:'
+            find build -maxdepth 8 -print | head -300
+            exit 1
+          fi
+          echo 'Collected plugin bundles:'
+          ls -lah package
+
+      - name: Upload plugin artifacts
+        uses: actions/upload-artifact@v4
         with:
-          name: RajvikDynamicsPro-${{ matrix.os }}
-          path: |
-            build/RajvikDynamicsPro_artefacts/Release/VST3
-            build/RajvikDynamicsPro_artefacts/Release/CLAP
-            build/RajvikDynamicsPro_artefacts/Release/AU
+          name: ${{ matrix.artifact }}
+          path: package/
+          if-no-files-found: error
+          retention-days: 14
