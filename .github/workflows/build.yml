@@ -28,7 +28,7 @@ jobs:
             artifact: rajvik-dynamics-pro-linux
     steps:
       - name: Checkout source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install Linux build dependencies
         if: runner.os == 'Linux'
@@ -43,10 +43,10 @@ jobs:
             libxkbcommon-dev libglu1-mesa-dev mesa-common-dev
 
       - name: Configure project
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DJUCE_BUILD_EXTRAS=OFF -DJUCE_BUILD_EXAMPLES=OFF -DRDP_BUILD_CLAP=ON
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DJUCE_BUILD_EXTRAS=OFF -DJUCE_BUILD_EXAMPLES=OFF -DCLAP_JUCE_EXTENSIONS_BUILD_EXAMPLES=OFF -DRDP_BUILD_CLAP=ON
 
       - name: Build plugin formats
-        run: cmake --build build --config Release --parallel 2
+        run: cmake --build build --config Release --parallel 2 --verbose
 
       - name: Run DSP tests
         run: ctest --test-dir build -C Release --output-on-failure
