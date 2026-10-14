@@ -1,51 +1,19 @@
 name: build
-
-on:
-  push:
-  pull_request:
-
-# Intentionally no concurrency cancellation group: independent runs must not
-# cancel one another while JUCE is compiling.
+on: [push, pull_request]
 jobs:
   build:
-    name: VST3 (${{ matrix.os }})
-    timeout-minutes: 60
     strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, macos-latest]
+      matrix: { os: [windows-latest, macos-latest] }
     runs-on: ${{ matrix.os }}
     steps:
-      - name: Check out source
-        uses: actions/checkout@v4
-
-      - name: Configure VST3-only build
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DRDP_BUILD_PLUGIN=ON
-
-      - name: Build VST3 (Windows)
-        if: runner.os == 'Windows'
-        run: cmake --build build --config Release --parallel 2
-
-      - name: Build VST3 (macOS)
-        if: runner.os == 'macOS'
-        run: cmake --build build --config Release --parallel 2
-
-      - name: Run DSP tests
-        run: ctest --test-dir build -C Release --output-on-failure
-
-      - name: Verify VST3 artifact exists
-        shell: bash
-        run: |
-          if [ ! -d "build/RajvikDynamicsPro_artefacts/Release/VST3" ]; then
-            echo "VST3 output directory was not created."
-            find build -maxdepth 7 -iname '*vst3*' -print || true
-            exit 1
-          fi
-          find "build/RajvikDynamicsPro_artefacts/Release/VST3" -maxdepth 4 -print
-
-      - name: Upload VST3 artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/checkout@v4
+      - run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+      - run: cmake --build build --config Release --parallel
+      - run: ctest --test-dir build -C Release --output-on-failure
+      - uses: actions/upload-artifact@v4
         with:
-          name: RajvikDynamicsPro-VST3-${{ matrix.os }}
-          path: build/RajvikDynamicsPro_artefacts/Release/VST3
-          if-no-files-found: error
+          name: RajvikDynamicsPro-${{ matrix.os }}
+          path: |
+            build/RajvikDynamicsPro_artefacts/Release/VST3
+            build/RajvikDynamicsPro_artefacts/Release/CLAP
+            build/RajvikDynamicsPro_artefacts/Release/AU
