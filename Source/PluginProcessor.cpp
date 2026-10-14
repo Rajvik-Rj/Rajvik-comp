@@ -1,5 +1,7 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include <algorithm>
+#include <cmath>
 using namespace rdp;
 
 RajvikProcessor::RajvikProcessor()
@@ -255,7 +257,15 @@ void RajvikProcessor::syncMidiMap()
 {
     if (mapDirty.exchange(false)) {
         juce::String s;
-        for (int cc = 0; cc < 128; ++cc) if (auto* p = ccMap[(size_t) cc].load()) s << cc << "=" << p->paramID << ";";
+        for (int cc = 0; cc < 128; ++cc) {
+            if (auto* p = ccMap[(size_t) cc].load()) {
+                // ccMap stores the RangedAudioParameter base type. Parameter IDs
+                // are declared by AudioProcessorParameterWithID, so access the ID
+                // through that derived type rather than through the base pointer.
+                if (auto* withID = dynamic_cast<juce::AudioProcessorParameterWithID*>(p))
+                    s << cc << "=" << withID->getParameterID() << ";";
+            }
+        }
         midiMapStr = s; apvts.state.setProperty("midiMap", s, nullptr);
     } else if (auto stored = apvts.state.getProperty("midiMap").toString(); stored != midiMapStr) {
         midiMapStr = stored;

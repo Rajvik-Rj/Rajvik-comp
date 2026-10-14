@@ -3,6 +3,7 @@
 #include <juce_dsp/juce_dsp.h>
 #include <array>
 #include <atomic>
+#include <memory>
 #include "ParameterDefinitions.h"
 #include "PresetManager.h"
 #include "DSP/CompressorEngine.h"
