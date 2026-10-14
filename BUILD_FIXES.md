@@ -1,10 +1,16 @@
-# Build fixes in this package
+# RAJVIK Dynamics Pro — build fixes in this package
 
-- Enabled both C and C++ in the root CMake project. This addresses the JUCE/CMake configure failure where `CMAKE_C_COMPILE_OBJECT` is missing with newer CMake releases.
-- Kept CLAP optional through `RDP_BUILD_CLAP` and enabled it in CI.
-- Updated GitHub Actions to build Windows, macOS, and Linux independently (`fail-fast: false`), run the DSP tests, and upload the discovered VST3/CLAP/AU bundles as artifacts.
-- Added the Linux packages required by JUCE's GUI/audio modules.
+This version fixes a cross-platform source compilation error and improves CI diagnostics.
 
-## Run the builds
+- The CMake project enables both C and C++, which JUCE and its helper projects require in this configuration.
+- Fixed MIDI-learn state serialization: the mapping stores `RangedAudioParameter*`, so code now safely casts to `AudioProcessorParameterWithID` before obtaining the stable parameter ID. The old `p->paramID` access was invalid through the base pointer and could stop compilation on Windows, macOS, and Linux.
+- Updated `actions/checkout` to v5 for current GitHub-hosted runners, and enabled verbose build output so any remaining compiler error is visible in the failed job log.
+- CI keeps the platform jobs independent, installs the required Linux GUI/audio development packages, runs the DSP unit tests, and uploads built VST3/CLAP/AU bundles as artifacts.
 
-Push the extracted project contents to the root of the GitHub repository, then open **Actions**. Each successful platform job will publish a separate artifact. This local verification environment could run the DSP tests, but it could not fetch JUCE from GitHub because outbound DNS/network access was unavailable; the full plugin build still needs to be confirmed by GitHub Actions.
+## Correct upload method
+
+Extract the ZIP and upload the *contents inside the `RajvikDynamicsPro` folder* to the repository root, preserving the `Source/`, `Tests/`, and `.github/workflows/` directory structure. Do not upload the outer folder as a nested directory and do not add another `RajvikDynamicsPro/` level inside the GitHub repository.
+
+## Verification
+
+The DSP-only build and its unit test pass in the available local environment. The full JUCE plugin compilation must be confirmed by GitHub Actions, because this environment cannot download JUCE dependencies directly.
