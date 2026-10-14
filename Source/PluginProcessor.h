@@ -7,6 +7,7 @@
 #include "PresetManager.h"
 #include "DSP/CompressorEngine.h"
 #include "DSP/SidechainEQ.h"
+#include "DSP/MultibandEngine.h"
 #include "DSP/SaturationProcessor.h"
 #include "DSP/MeteringEngine.h"
 
@@ -20,6 +21,12 @@ struct MeterRing {
         in[idx].store(i, std::memory_order_relaxed); out[idx].store(o, std::memory_order_relaxed); gr[idx].store(g, std::memory_order_relaxed);
         w.store(w.load(std::memory_order_relaxed) + 1, std::memory_order_release);
     }
+};
+
+// Mono sample ring read by the GUI's FFT analyzers (audio thread only writes; only filled while an editor is open)
+struct AnalyzerFeed {
+    static constexpr int N = 4096;
+    std::array<std::atomic<float>, N> buf{}; std::atomic<unsigned> w{ 0 };
 };
 
 class RajvikProcessor : public juce::AudioProcessor {
@@ -45,6 +52,7 @@ public:
 
     void toggleAB();
     int currentAB() const { return abCurrent; }
+    void copyToOtherAB() { abState[abCurrent ^ 1] = apvts.copyState(); }   // A/B "Copy": current slot -> the other slot
     void copySettings() { clipboard = apvts.copyState(); }
     void pasteSettings() { if (clipboard.isValid()) apvts.replaceState(clipboard.createCopy()); }
     void applyModeDefaults();
@@ -59,17 +67,24 @@ public:
     juce::AudioProcessorValueTreeState apvts;
     rdp::PresetManager presets;
     MeterRing meters;
+    AnalyzerFeed anIn, anOut, anDet;   // input, final output, and the detector signal after sidechain EQ
     // loudness / peak meters (only computed while an editor is open)
     std::atomic<float> mMom{ -100.f }, mShort{ -100.f }, mInt{ -100.f }, mTp{ -100.f }, mRmsIn{ -100.f }, mRmsOut{ -100.f };
     std::atomic<bool> metersWanted{ false }, meterReset{ false };
+    // multiband display feed (per band gain change in dB, band input level in dB) - written by the audio thread, read by the GUI
+    std::array<std::atomic<float>, 4> mbGr{}, mbLvl{};
 private:
-    struct Prm { std::atomic<float> *mode, *thr, *ratio, *atk, *rel, *mix, *knee, *range, *hold, *look, *link, *inG, *outG, *autoGain, *autoRel,
-        *det, *chr, *drive, *os, *scExt, *scListen, *hpf, *hpfSlope, *lpf, *lowF, *lowG, *bellF, *bellG, *bellQ, *highF, *highG,
-        *stMode, *syncOn, *syncRate, *syncOff, *syncPulse; } prm{};
+    struct Prm {
+        std::atomic<float> *mode{}, *thr{}, *ratio{}, *atk{}, *rel{}, *mix{}, *knee{}, *range{}, *hold{}, *look{}, *link{}, *inG{}, *outG{}, *autoGain{}, *autoRel{},
+            *det{}, *chr{}, *drive{}, *os{}, *stMode{}, *procMid{}, *procSide{}, *syncOn{}, *syncRate{}, *syncOff{}, *syncPulse{},
+            *scOn{}, *scExt{}, *scRoute{}, *scLevel{}, *scListen{}, *scInvert{}, *scEqOn{}, *eqBands{}, *mbOn{}, *mbBands{}, *mbX[3]{};
+    } prm;
+    struct EqP { std::atomic<float> *on{}, *type{}, *freq{}, *gain{}, *q{}, *slope{}; } eqP[rdp::kEqBands];
+    struct MbP { std::atomic<float> *thr{}, *ratio{}, *atk{}, *rel{}, *gain{}, *solo{}, *mute{}, *byp{}; } mbP[4];
 
     void processChunk(juce::AudioBuffer<float>& main, int start, int n, int nCh, const float* const* sc, int scCh);
 
-    rdp::CompressorEngine engine; rdp::SidechainEQ eq; rdp::SaturationProcessor sat; rdp::MeteringEngine meter;
+    rdp::CompressorEngine engine; rdp::MultibandEngine mb; rdp::SidechainEQ eq; rdp::SaturationProcessor sat; rdp::MeteringEngine meter;
     rdp::DelayLine lookDelay[2], dryDelay[2], wetDelay[2];
     juce::AudioBuffer<float> wet, dry;
     std::array<std::unique_ptr<juce::dsp::Oversampling<float>>, 5> os;
@@ -77,7 +92,8 @@ private:
     int lastOs = -2, maxBlock = 512;
     double sr = 44100;
     juce::SmoothedValue<float> inSm, outSm, mixSm, mkSm;
-    int lookS = 0, osIdx = -1, osLatNow = 0, chrIdx = 0; bool listen = false, extSc = false, msOn = false, autoOn = false;
+    int lookS = 0, osIdx = -1, osLatNow = 0, chrIdx = 0, routeMode = 0; bool listen = false, extSc = false, msOn = false, autoOn = false;
+    unsigned anWr = 0, anWrOut = 0; bool mbActive = false, mbShared = false, scOnNow = true, eqRun = false, procCh[2] = { true, true }; float detGain = 1.f;
     // tempo sync
     bool syncActive = false; double syncPpq0 = 0, ppqPerSample = 0, syncBeats = 1, syncOff = 0, syncPulse = 0.25;
     double pIn = 0, pOut = 0;   // slow power averages for loudness-matched auto gain
