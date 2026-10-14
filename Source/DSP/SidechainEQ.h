@@ -3,78 +3,103 @@
 #include <array>
 #include <complex>
 namespace rdp {
+
+enum EqType { EqHPF = 0, EqLowShelf, EqBell, EqHighShelf, EqLPF };
+inline constexpr int kEqBands = 6;
+
+struct EqBand {
+    bool on = true; int type = EqBell;
+    float freq = 1000, gain = 0, q = 1;
+    int slope = 1;                     // 0/1/2 = 12/24/48 dB per octave (HPF / LPF only)
+    bool operator==(const EqBand&) const = default;
+};
 struct SidechainEqParams {
-    float hpfHz = 20; int hpfStages = 1;          // 1/2/4 stages = 12/24/48 dB/oct
-    float lpfHz = 20000;                           // 12 dB/oct
-    float lowHz = 100, lowDb = 0;                  // low shelf
-    float bellHz = 1000, bellDb = 0, bellQ = 1;    // bell
-    float highHz = 6000, highDb = 0;               // high shelf
+    int numBands = kEqBands; bool enabled = true; EqBand band[kEqBands];
     bool operator==(const SidechainEqParams&) const = default;
 };
+struct BiquadCoef { float b0 = 1, b1 = 0, b2 = 0, a1 = 0, a2 = 0; };
 
+inline bool eqIsCut(int t) noexcept { return t == EqHPF || t == EqLPF; }
+inline bool eqBandActive(const EqBand& b) noexcept {
+    if (!b.on) return false;
+    switch (b.type) { case EqHPF: return b.freq > 20.5f; case EqLPF: return b.freq < 19500.f; default: return std::fabs(b.gain) > 0.05f; }
+}
+inline BiquadCoef eqDesign(int type, float f, float Q, float gdb, double sr) {
+    f = std::min(f, (float) sr * 0.45f);
+    const double w0 = 2.0 * 3.14159265358979 * f / sr, cw = std::cos(w0), sw = std::sin(w0);
+    const double alpha = sw / (2.0 * Q), A = std::pow(10.0, gdb / 40.0), beta = 2.0 * std::sqrt(A) * alpha;
+    double b0, b1, b2, a0, a1, a2;
+    switch (type) {
+        case EqHPF: b0 = (1 + cw) / 2; b1 = -(1 + cw); b2 = b0; a0 = 1 + alpha; a1 = -2 * cw; a2 = 1 - alpha; break;
+        case EqLPF: b0 = (1 - cw) / 2; b1 = 1 - cw; b2 = b0; a0 = 1 + alpha; a1 = -2 * cw; a2 = 1 - alpha; break;
+        case EqBell: b0 = 1 + alpha * A; b1 = -2 * cw; b2 = 1 - alpha * A; a0 = 1 + alpha / A; a1 = -2 * cw; a2 = 1 - alpha / A; break;
+        case EqLowShelf:
+            b0 = A * ((A + 1) - (A - 1) * cw + beta); b1 = 2 * A * ((A - 1) - (A + 1) * cw); b2 = A * ((A + 1) - (A - 1) * cw - beta);
+            a0 = (A + 1) + (A - 1) * cw + beta; a1 = -2 * ((A - 1) + (A + 1) * cw); a2 = (A + 1) + (A - 1) * cw - beta; break;
+        default:
+            b0 = A * ((A + 1) + (A - 1) * cw + beta); b1 = -2 * A * ((A - 1) + (A + 1) * cw); b2 = A * ((A + 1) + (A - 1) * cw - beta);
+            a0 = (A + 1) - (A - 1) * cw + beta; a1 = 2 * ((A - 1) - (A + 1) * cw); a2 = (A + 1) - (A - 1) * cw - beta; break;
+    }
+    return { (float) (b0 / a0), (float) (b1 / a0), (float) (b2 / a0), (float) (a1 / a0), (float) (a2 / a0) };
+}
+// Biquad stages for one band (HPF/LPF: 1, 2 or 4 Butterworth sections). Returns 0 if the band does nothing.
+inline int eqBandStages(const EqBand& b, double sr, BiquadCoef* out) {
+    if (!eqBandActive(b)) return 0;
+    if (!eqIsCut(b.type)) { out[0] = eqDesign(b.type, b.freq, std::max(b.q, 0.1f), b.gain, sr); return 1; }
+    static const float q1[] = { 0.7071f }, q2[] = { 0.5412f, 1.3066f }, q4[] = { 0.5098f, 0.6013f, 0.8999f, 2.5629f };
+    const int st = b.slope >= 2 ? 4 : (b.slope == 1 ? 2 : 1);
+    const float* q = st == 4 ? q4 : (st == 2 ? q2 : q1);
+    for (int i = 0; i < st; ++i) out[i] = eqDesign(b.type, b.freq, q[i], 0.f, sr);
+    return st;
+}
+inline double biquadMagnitude(const BiquadCoef& q, double w) {
+    const std::complex<double> z1 = std::polar(1.0, -w), z2 = std::polar(1.0, -2.0 * w);
+    return std::abs((double) q.b0 + (double) q.b1 * z1 + (double) q.b2 * z2) / std::abs(1.0 + (double) q.a1 * z1 + (double) q.a2 * z2);
+}
+// Response of a single band in dB (0 when inactive) - used for the per-band curves in the GUI
+inline float eqBandResponseDb(const EqBand& b, float f, double sr) {
+    BiquadCoef c[4]; const int n = eqBandStages(b, sr, c);
+    const double w = 2.0 * 3.14159265358979 * f / sr; double m = 1.0;
+    for (int i = 0; i < n; ++i) m *= biquadMagnitude(c[i], w);
+    return (float) (20.0 * std::log10(std::max(m, 1e-9)));
+}
+
+// 6-band detector EQ (HPF / shelves / bells / LPF). Affects the detector only. Each band owns 4 filter slots,
+// so changing one band never disturbs the filter state of the others.
 class SidechainEQ {
 public:
+    static constexpr int kSlots = 4;
     void prepare(double sr) { sampleRate = sr; cached = false; reset(); setParams(params); }
-    void reset() { for (auto& c : z) for (auto& s : c) s = {0, 0}; }
+    void reset() { for (auto& c : z) for (auto& s : c) s = {}; }
     void setParams(const SidechainEqParams& p) {
         if (cached && p == params) return;
-        params = p; cached = true; n = 0;
-        static const float q1[] = {0.7071f}, q2[] = {0.5412f, 1.3066f}, q4[] = {0.5098f, 0.6013f, 0.8999f, 2.5629f};
-        if (p.hpfHz > 20.5f) {
-            const int st = p.hpfStages >= 4 ? 4 : (p.hpfStages >= 2 ? 2 : 1);
-            const float* q = st == 4 ? q4 : (st == 2 ? q2 : q1);
-            for (int i = 0; i < st; ++i) add(Type::HPF, p.hpfHz, q[i], 0);
+        params = p; cached = true; any = false;
+        for (int b = 0; b < kEqBands; ++b) {
+            nSt[b] = 0;
+            if (p.enabled && b < p.numBands) nSt[b] = eqBandStages(p.band[b], sampleRate, &co[b * kSlots]);
+            any = any || nSt[b] > 0;
         }
-        if (p.lpfHz < 19500.f) add(Type::LPF, p.lpfHz, 0.7071f, 0);
-        if (std::fabs(p.lowDb) > 0.05f)  add(Type::LowShelf, p.lowHz, 0.7071f, p.lowDb);
-        if (std::fabs(p.bellDb) > 0.05f) add(Type::Peak, p.bellHz, p.bellQ, p.bellDb);
-        if (std::fabs(p.highDb) > 0.05f) add(Type::HighShelf, p.highHz, 0.7071f, p.highDb);
     }
-    bool isActive() const noexcept { return n > 0; }
+    bool isActive() const noexcept { return any; }
     float process(int c, float x) noexcept {
-        for (int k = 0; k < n; ++k) {
-            const auto& q = co[k]; auto& s = z[c][k];
-            const float y = q.b0 * x + s.z1;
-            s.z1 = q.b1 * x - q.a1 * y + s.z2;
-            s.z2 = q.b2 * x - q.a2 * y;
-            x = y;
-        }
+        for (int b = 0; b < kEqBands; ++b)
+            for (int k = 0; k < nSt[b]; ++k) {
+                const int i = b * kSlots + k; const auto& q = co[i]; auto& s = z[c][i];
+                const float y = q.b0 * x + s.z1;
+                s.z1 = flush(q.b1 * x - q.a1 * y + s.z2);
+                s.z2 = flush(q.b2 * x - q.a2 * y);
+                x = y;
+            }
         return x;
     }
     float magnitudeDb(float f) const {
-        const double w = 2.0 * 3.14159265358979 * f / sampleRate;
-        const std::complex<double> z1 = std::polar(1.0, -w), z2 = std::polar(1.0, -2.0 * w);
-        double mag = 1.0;
-        for (int k = 0; k < n; ++k) {
-            const auto& q = co[k];
-            mag *= std::abs((double) q.b0 + (double) q.b1 * z1 + (double) q.b2 * z2) / std::abs(1.0 + (double) q.a1 * z1 + (double) q.a2 * z2);
-        }
-        return (float) (20.0 * std::log10(std::max(mag, 1e-9)));
+        const double w = 2.0 * 3.14159265358979 * f / sampleRate; double m = 1.0;
+        for (int b = 0; b < kEqBands; ++b) for (int k = 0; k < nSt[b]; ++k) m *= biquadMagnitude(co[b * kSlots + k], w);
+        return (float) (20.0 * std::log10(std::max(m, 1e-9)));
     }
 private:
-    enum class Type { HPF, LPF, Peak, LowShelf, HighShelf };
-    struct Co { float b0 = 1, b1 = 0, b2 = 0, a1 = 0, a2 = 0; };
     struct St { float z1 = 0, z2 = 0; };
-    void add(Type t, float f, float Q, float gdb) {
-        if (n >= 8) return;
-        f = std::min(f, (float) sampleRate * 0.45f);
-        const double w0 = 2.0 * 3.14159265358979 * f / sampleRate, cw = std::cos(w0), sw = std::sin(w0);
-        const double alpha = sw / (2.0 * Q), A = std::pow(10.0, gdb / 40.0), beta = 2.0 * std::sqrt(A) * alpha;
-        double b0, b1, b2, a0, a1, a2;
-        switch (t) {
-            case Type::HPF: b0 = (1 + cw) / 2; b1 = -(1 + cw); b2 = b0; a0 = 1 + alpha; a1 = -2 * cw; a2 = 1 - alpha; break;
-            case Type::LPF: b0 = (1 - cw) / 2; b1 = 1 - cw; b2 = b0; a0 = 1 + alpha; a1 = -2 * cw; a2 = 1 - alpha; break;
-            case Type::Peak: b0 = 1 + alpha * A; b1 = -2 * cw; b2 = 1 - alpha * A; a0 = 1 + alpha / A; a1 = -2 * cw; a2 = 1 - alpha / A; break;
-            case Type::LowShelf:
-                b0 = A * ((A + 1) - (A - 1) * cw + beta); b1 = 2 * A * ((A - 1) - (A + 1) * cw); b2 = A * ((A + 1) - (A - 1) * cw - beta);
-                a0 = (A + 1) + (A - 1) * cw + beta; a1 = -2 * ((A - 1) + (A + 1) * cw); a2 = (A + 1) + (A - 1) * cw - beta; break;
-            default:
-                b0 = A * ((A + 1) + (A - 1) * cw + beta); b1 = -2 * A * ((A - 1) + (A + 1) * cw); b2 = A * ((A + 1) + (A - 1) * cw - beta);
-                a0 = (A + 1) - (A - 1) * cw + beta; a1 = 2 * ((A - 1) - (A + 1) * cw); a2 = (A + 1) - (A - 1) * cw - beta; break;
-        }
-        co[n++] = { (float) (b0 / a0), (float) (b1 / a0), (float) (b2 / a0), (float) (a1 / a0), (float) (a2 / a0) };
-    }
-    SidechainEqParams params; bool cached = false; double sampleRate = 44100;
-    std::array<Co, 8> co{}; std::array<std::array<St, 8>, 2> z{}; int n = 0;
+    SidechainEqParams params; bool cached = false, any = false; double sampleRate = 44100;
+    std::array<BiquadCoef, kEqBands * kSlots> co{}; std::array<std::array<St, kEqBands * kSlots>, 2> z{}; int nSt[kEqBands] = {};
 };
 } // namespace rdp
