@@ -3,16 +3,19 @@
 Original JUCE/C++ compressor plugin (VST3 + Standalone) with 14 compression styles, sidechain EQ, analog character and a live GR display.
 Original design inspired by modern dynamics-plugin workflow; no third-party artwork or branding.
 
-## Build (Windows, VST3)
-Requires Visual Studio 2022 (Desktop C++) and CMake >= 3.22. JUCE 8.0.6 is downloaded automatically.
-```
-cmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build --config Release --parallel
+## Build locally
+Requires CMake >= 3.22, Git, and a C++20 compiler. On Windows, install Visual Studio with **Desktop development with C++**. JUCE 8.0.6 and CLAP extensions are fetched by CMake. Both C and C++ are enabled because recent JUCE/CMake toolchains validate the C compiler during configuration.
+
+```sh
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release --parallel 2
 ctest --test-dir build -C Release --output-on-failure
 ```
-Copy `build/RajvikDynamicsPro_artefacts/Release/VST3/RAJVIK DYNAMICS PRO.vst3` to `C:\Program Files\Common Files\VST3\`.
-Tests only: `cmake -B build -DRDP_BUILD_PLUGIN=OFF && cmake --build build && ctest --test-dir build`.
-CLAP builds automatically (output in `RajvikDynamicsPro_artefacts/Release/CLAP`); AU builds on macOS.
+
+The VST3 bundle is under `build/RajvikDynamicsPro_artefacts/Release/VST3/`. Copy it to `C:\Program Files\Common Files\VST3\` on Windows, `~/Library/Audio/Plug-Ins/VST3/` on macOS, or `~/.vst3/` on Linux. CLAP also builds by default; AU is added on macOS. Set `-DRDP_BUILD_CLAP=OFF` to skip CLAP, or `-DRDP_BUILD_PLUGIN=OFF` to build only the DSP tests.
+
+## GitHub Actions builds
+Push the project to GitHub and open **Actions**. The workflow builds Windows, macOS, and Linux plugin artifacts separately and runs the DSP tests. `fail-fast: false` lets the other platforms continue even if one build fails. Download the desired plugin bundle from the successful workflow run's **Artifacts** section.
 
 ## Architecture
 `Source/DSP/` is JUCE-free and unit-tested: `CompressorEngine` (detector, gain computer, smoothing, linking), `CompressionAlgorithms` (14 mode profiles),
@@ -41,7 +44,7 @@ mix; in/out gain; live input/output/GR history + transfer curve from real DSP; *
 **Planned / not implemented:** pre-compression saturation routing, fullscreen/help buttons, surround layouts, polarity invert, host-level state/automation tests.
 
 ## Honest status
-The DSP core (including the loudness meter) compiles and its tests pass. The JUCE plugin/GUI layer was written without being compiled or loaded in a DAW in the authoring environment: expect to fix a few compile errors on first build, then validate in your DAW.
+The DSP tests run as part of the GitHub Actions workflow. A green CI build confirms compilation for that runner and plugin format; still load-test the plugin in your own DAW before relying on it in a production session.
 
 ## Troubleshooting
 CMake can't fetch JUCE -> check git/network. MSVC C++20 errors -> use VS 2022 17.4+. Plugin not found -> rescan VST3 folder in your DAW.
@@ -60,8 +63,7 @@ Layout is a 1:1 recreation of the reference design on a 1536x1024 canvas, scaled
 Things the reference has no room for live behind the gear icon (Character, Drive, Tempo Sync, actions); LUFS / true-peak: click the OUT read-out.
 Character lives in the gear menu; the Invert button flips detector polarity (no effect on compression).
 
-**Build note:** DSP tests (`DspTests`) compile and pass without JUCE (33 checks). The JUCE plugin target (processor + editor) was written
-without access to JUCE in the authoring environment - build it with CMake + JUCE and fix any compile typos first.
+**Build note:** `DspTests` can be built without downloading JUCE by configuring with `-DRDP_BUILD_PLUGIN=OFF`. The complete plugin is built by the GitHub Actions workflow on Windows, macOS, and Linux.
 
 ## Visualizers (real-time FFT)
 
