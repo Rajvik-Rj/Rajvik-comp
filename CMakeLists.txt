@@ -19,7 +19,15 @@ if(RDP_BUILD_PLUGIN)
   FetchContent_Declare(JUCE GIT_REPOSITORY https://github.com/juce-framework/JUCE.git GIT_TAG 8.0.6 GIT_SHALLOW ON)
   FetchContent_MakeAvailable(JUCE)
 
-  set(RDP_FORMATS VST3)
+  option(RDP_BUILD_CLAP "Build CLAP via clap-juce-extensions" ON)
+  set(RDP_FORMATS VST3 Standalone)
+  if(APPLE)
+    list(APPEND RDP_FORMATS AU)   # Audio Unit (macOS only)
+  endif()
+  if(RDP_BUILD_CLAP)
+    FetchContent_Declare(clap-juce-extensions GIT_REPOSITORY https://github.com/free-audio/clap-juce-extensions.git GIT_TAG main)
+    FetchContent_MakeAvailable(clap-juce-extensions)
+  endif()
 
   juce_add_plugin(RajvikDynamicsPro
     COMPANY_NAME "RAJVIK"
@@ -37,4 +45,7 @@ if(RDP_BUILD_PLUGIN)
   target_link_libraries(RajvikDynamicsPro PRIVATE juce::juce_audio_utils juce::juce_dsp
     PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_lto_flags juce::juce_recommended_warning_flags)
 
+  if(RDP_BUILD_CLAP)
+    clap_juce_extensions_plugin(TARGET RajvikDynamicsPro CLAP_ID "com.rajvik.dynamicspro" CLAP_FEATURES audio-effect compressor)
+  endif()
 endif()
