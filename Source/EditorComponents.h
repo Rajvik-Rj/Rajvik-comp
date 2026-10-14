@@ -96,7 +96,7 @@ public:
         if (tog && on && icon.startsWith("t")) {   // tool buttons: highlighted cell
             g.setColour(accent.withAlpha(0.14f)); g.fillRoundedRectangle(r.reduced(1.f), 5.f); g.setColour(accent); g.drawRoundedRectangle(r.reduced(1.f), 5.f, 1.2f);
         }
-        const auto col = tog ? (on ? accent : dim) : (down ? accent : (hl ? text : dim.brighter(0.25f)));
+        const auto col = tog ? (on ? accent : dim) : (down ? accent : (hl ? ui::text : dim.brighter(0.25f)));
         drawIcon(g, icon, r.reduced(r.getHeight() * 0.18f), col, lw * std::max(1.f, r.getHeight() / 34.f));
     }
     juce::String icon; float lw;
@@ -108,7 +108,7 @@ public:
     int underline = -1;   // A/B: 0 = A, 1 = B
     void paintButton(juce::Graphics& g, bool hl, bool) override {
         auto r = getLocalBounds().toFloat(); g.setFont(font(r.getHeight() * 0.42f));
-        g.setColour(hl ? text : text.withAlpha(0.88f));
+        g.setColour(hl ? ui::text : ui::text.withAlpha(0.88f));
         if (underline < 0) { g.drawText(getButtonText(), r, juce::Justification::centred); return; }
         const float cw = r.getWidth() / 3.f; juce::Rectangle<float> parts[3] = { r.withWidth(cw), r.withX(r.getX() + cw).withWidth(cw), r.withX(r.getX() + 2 * cw).withWidth(cw) };
         g.drawText("A", parts[0], juce::Justification::centred); g.drawText("/", parts[1], juce::Justification::centred); g.drawText("B", parts[2], juce::Justification::centred);
@@ -463,8 +463,8 @@ public:
             auto tag = juce::Rectangle<float>(reg.getX() + 8.f * k, pr.getBottom() - 28.f * k, 22.f * k, 22.f * k);
             g.setColour(col.withAlpha(selB ? 1.f : 0.6f)); g.fillEllipse(tag); g.setColour(ui::bg); g.setFont(ui::font(13.f * k, true)); g.drawText(juce::String(b + 1), tag, juce::Justification::centred);
             g.setColour(ui::text.withAlpha(0.8f)); g.setFont(ui::font(12.f * k));
-            juce::String flags; if (solo) flags << "S "; if (muted) flags << "M "; if (byp) flags << "BYP";
-            g.drawText(flags, juce::Rectangle<float>(tag.getRight() + 4.f * k, tag.getY(), 90.f * k, tag.getHeight()), juce::Justification::centredLeft);
+            juce::String flagTxt; if (solo) flagTxt << "S "; if (muted) flagTxt << "M "; if (byp) flagTxt << "BYP";
+            g.drawText(flagTxt, juce::Rectangle<float>(tag.getRight() + 4.f * k, tag.getY(), 90.f * k, tag.getHeight()), juce::Justification::centredLeft);
             if (selB) { g.setColour(col.withAlpha(0.7f)); g.drawRect(reg.reduced(0.5f), 1.f); }
         }
         for (int j = 0; j < n - 1; ++j) {   // crossover handles
@@ -678,7 +678,7 @@ public:
             const juce::String gt = rdp::eqIsCut(type) ? juce::String(12 << (int) ui::getP(apvts, "eqSlope" + n)) + " dB" : juce::String(ui::getP(apvts, "eqGain" + n), 1) + " dB";
             g.drawText(gt, juce::Rectangle<float>(213.f * u, cy - 10.f * k, 60.f * u, 20.f * k), juce::Justification::centredLeft);
             ui::drawIcon(g, "power", juce::Rectangle<float>(283.f * u - 9.f * k, cy - 9.f * k, 18.f * k, 18.f * k), on ? ui::accent : ui::faint, 1.5f * k);
-            ui::drawIcon(g, type == EqBell ? "tBell" : (type == EqLowShelf || type == EqHighShelf ? "tShelf" : "tCut"),
+            ui::drawIcon(g, type == rdp::EqBell ? "tBell" : (type == rdp::EqLowShelf || type == rdp::EqHighShelf ? "tShelf" : "tCut"),
                 juce::Rectangle<float>(315.f * u - 10.f * k, cy - 10.f * k, 20.f * k, 20.f * k), ui::dim.withAlpha(a), 1.4f * k);
         }
     }

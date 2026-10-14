@@ -16,12 +16,12 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     auto addF = [&](const juce::String& id, const juce::String& name, NR r, float def, const juce::String& unit = {}, int dec = 1) {
         auto attr = juce::AudioParameterFloatAttributes()
             .withStringFromValueFunction([unit, dec](float v, int) { return juce::String(v, dec < 0 ? (std::abs(v) < 0.995f ? 2 : 1) : dec) + unit; })
-            .withValueFromTextFunction([](const juce::String& t) { return t.getFloatValue(); });
+            .withValueFromStringFunction([](const juce::String& t) { return t.getFloatValue(); });
         p.push_back(std::make_unique<F>(juce::ParameterID{ id, 1 }, name, r, def, attr)); };
     auto addFreq = [&](const juce::String& id, const juce::String& name, float def) {
         NR r(20.f, 20000.f, 0.f); r.setSkewForCentre(1000.f);
         auto attr = juce::AudioParameterFloatAttributes().withStringFromValueFunction([](float v, int) { return freqText(v); })
-            .withValueFromTextFunction([](const juce::String& t) { return freqFromText(t); });
+            .withValueFromStringFunction([](const juce::String& t) { return freqFromText(t); });
         p.push_back(std::make_unique<F>(juce::ParameterID{ id, 1 }, name, r, def, attr)); };
     auto skew = [](float lo, float hi, float centre) { NR r(lo, hi); r.setSkewForCentre(centre); return r; };
     auto addB = [&](const juce::String& id, const juce::String& name, bool def) {
