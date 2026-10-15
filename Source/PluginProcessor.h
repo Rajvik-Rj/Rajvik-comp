@@ -73,20 +73,25 @@ public:
     std::atomic<bool> metersWanted{ false }, meterReset{ false };
     // multiband display feed (per band gain change in dB, band input level in dB) - written by the audio thread, read by the GUI
     std::array<std::atomic<float>, 4> mbGr{}, mbLvl{};
+    // detector level after the sidechain EQ (dB, peak) and the threshold actually in use (differs from the knob when Auto Threshold is on)
+    std::atomic<float> scMeter{ -100.f }, effThr{ -18.f };
 private:
     struct Prm {
         std::atomic<float> *mode{}, *thr{}, *ratio{}, *atk{}, *rel{}, *mix{}, *knee{}, *range{}, *hold{}, *look{}, *link{}, *inG{}, *outG{}, *autoGain{}, *autoRel{},
             *det{}, *chr{}, *drive{}, *os{}, *stMode{}, *procMid{}, *procSide{}, *syncOn{}, *syncRate{}, *syncOff{}, *syncPulse{},
-            *scOn{}, *scExt{}, *scRoute{}, *scLevel{}, *scListen{}, *scInvert{}, *scEqOn{}, *eqBands{}, *mbOn{}, *mbBands{}, *mbX[3]{};
+            *dry{}, *wetPan{}, *dryPan{}, *autoThr{}, *charPost{}, *lookOn{}, *scOn{}, *scExt{}, *scRoute{}, *scLevel{}, *scListen{}, *scInvert{}, *scEqOn{}, *eqBands{}, *mbOn{}, *mbBands{}, *mbX[3]{};
     } prm;
-    struct EqP { std::atomic<float> *on{}, *type{}, *freq{}, *gain{}, *q{}, *slope{}; } eqP[rdp::kEqBands];
+    struct EqP { std::atomic<float> *on{}, *type{}, *freq{}, *gain{}, *q{}, *slope{}, *ms{}; } eqP[rdp::kEqBands];
     struct MbP { std::atomic<float> *thr{}, *ratio{}, *atk{}, *rel{}, *gain{}, *solo{}, *mute{}, *byp{}; } mbP[4];
 
     void processChunk(juce::AudioBuffer<float>& main, int start, int n, int nCh, const float* const* sc, int scCh);
 
     rdp::CompressorEngine engine; rdp::MultibandEngine mb; rdp::SidechainEQ eq; rdp::SaturationProcessor sat; rdp::MeteringEngine meter;
-    rdp::DelayLine lookDelay[2], dryDelay[2], wetDelay[2];
-    juce::AudioBuffer<float> wet, dry;
+    rdp::DelayLine lookDelay[2], rawLook[2], dryDelay[2], wetDelay[2];
+    juce::AudioBuffer<float> wet, dry, inBuf, pre;
+    // auto threshold / MIDI trigger / character routing / gain-change scale
+    double autoPow = 0.0158; float gcScale = 1.f; bool preMode = false, trigMidi = false, gate = false; int heldNotes = 0;
+    struct GateEv { int pos; bool on; }; GateEv gateEv[128]; int nGateEv = 0, gateIdx = 0;
     std::array<std::unique_ptr<juce::dsp::Oversampling<float>>, 5> os;
     std::array<int, 5> osLat{};
     int lastOs = -2, maxBlock = 512;

@@ -3,11 +3,11 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "PluginProcessor.h"
 
-// All layout is designed on a 1536 x 1024 reference canvas (the design image) and scaled with  k = width / 1536.
+// Layout is designed on a 1100 px wide canvas and scaled with  k = width / 1100.
 namespace ui {
-inline const juce::Colour bg{ 0xff090c13 }, bgTop{ 0xff0e121c }, panel{ 0xff0c111b }, panelEdge{ 0xff1b2335 }, field{ 0xff0e1420 }, fieldEdge{ 0xff28324a },
-                          text{ 0xffe8ebf2 }, dim{ 0xff8b93a4 }, faint{ 0xff4a5366 }, accent{ 0xffffc21a }, orange{ 0xffff8a1f }, blue{ 0xff2f81ff },
-                          green{ 0xff3fd35a }, red{ 0xffff4545 }, grid{ 0xff161d2b };
+inline const juce::Colour bg{ 0xff131316 }, bgTop{ 0xff1c1c20 }, panel{ 0xff18181b }, panelEdge{ 0xff2c2c32 }, field{ 0xff1b1b1f }, fieldEdge{ 0xff35353c },
+                          text{ 0xffdcdce2 }, dim{ 0xff90909a }, faint{ 0xff55555d }, accent{ 0xfff4c430 }, orange{ 0xffee8a2a }, blue{ 0xff4a90e2 },
+                          green{ 0xff86c93e }, red{ 0xffe9474c }, grid{ 0xff232328 };
 inline const juce::Colour eqCol[6] = { juce::Colour(0xff8a93a3), juce::Colour(0xffffc21a), juce::Colour(0xff3fd35a), juce::Colour(0xff2f8cff), juce::Colour(0xffb04dff), juce::Colour(0xffff6a2a) };
 inline const juce::Colour bandCol[4] = { juce::Colour(0xffff6a2a), juce::Colour(0xffffc21a), juce::Colour(0xff3fd35a), juce::Colour(0xff2f8cff) };
 
@@ -17,8 +17,8 @@ inline juce::Font font(float h, bool bold = false, float kern = 0.f) {
     return juce::Font(o);
 }
 inline float scaleOf(const juce::Component& c) {
-    if (auto* t = c.getTopLevelComponent()) return std::max(0.2f, std::min((float) t->getWidth() / 1536.f, (float) t->getHeight() / 1024.f));
-    return 0.75f; }
+    if (auto* t = c.getTopLevelComponent()) return std::max(0.2f, (float) t->getWidth() / 1100.f);
+    return 0.9f; }
 // font that is shrunk (never grown) so that `t` fits into maxW pixels - nothing is ever clipped, whatever the system font is
 inline juce::Font fitFont(const juce::String& t, float h, float maxW, bool bold = false, float kern = 0.f) {
     auto f = font(h, bold, kern);
@@ -89,6 +89,19 @@ inline void drawIcon(juce::Graphics& g, const juce::String& n, juce::Rectangle<f
         p.startNewSubPath(P(.08f, .30f)); p.lineTo(P(.36f, .30f)); p.cubicTo(P(.54f, .30f), P(.46f, .72f), P(.64f, .72f)); p.lineTo(P(.92f, .72f)); stroke();
     } else if (n == "tCut") {
         p.startNewSubPath(P(.08f, .78f)); p.lineTo(P(.34f, .78f)); p.cubicTo(P(.52f, .78f), P(.46f, .26f), P(.64f, .26f)); p.lineTo(P(.92f, .26f)); stroke();
+    } else if (n == "phones") {   // headphones (side-chain listen)
+        p.addCentredArc(x + w * .5f, y + w * .56f, w * .36f, w * .36f, 0.f, -juce::MathConstants<float>::halfPi, juce::MathConstants<float>::halfPi, true);
+        p.addRoundedRectangle(x + w * .10f, y + w * .54f, w * .20f, w * .32f, w * .06f); p.addRoundedRectangle(x + w * .70f, y + w * .54f, w * .20f, w * .32f, w * .06f); stroke();
+    } else if (n == "trigInt") {   // internal sidechain
+        p.addEllipse(x + w * .14f, y + w * .14f, w * .72f, w * .72f); p.addEllipse(x + w * .40f, y + w * .40f, w * .20f, w * .20f); stroke();
+    } else if (n == "trigExt") {   // external sidechain: signal into a box
+        p.startNewSubPath(P(.06f, .5f)); p.lineTo(P(.52f, .5f)); p.startNewSubPath(P(.38f, .32f)); p.lineTo(P(.54f, .5f)); p.lineTo(P(.38f, .68f));
+        p.addRoundedRectangle(x + w * .64f, y + w * .2f, w * .28f, w * .6f, w * .05f); stroke();
+    } else if (n == "trigMidi") {   // 5-pin DIN
+        p.addEllipse(x + w * .10f, y + w * .10f, w * .80f, w * .80f);
+        for (int i = 0; i < 5; ++i) { const float a = -0.9f + (float) i * 0.45f; p.addEllipse(x + w * (.5f + .27f * std::sin(a) - .045f), y + w * (.5f - .27f * std::cos(a) - .045f), w * .09f, w * .09f); } stroke();
+    } else if (n == "trigTempo") {   // note
+        p.addEllipse(x + w * .20f, y + w * .60f, w * .30f, w * .22f); p.startNewSubPath(P(.48f, .68f)); p.lineTo(P(.48f, .16f)); p.cubicTo(P(.52f, .34f), P(.80f, .32f), P(.74f, .58f)); stroke();
     } else if (n == "logo") {   // wide, uses the full rect
         static const float pts[][2] = { {0,.5f},{.07f,.5f},{.12f,.18f},{.2f,.86f},{.28f,.08f},{.36f,.94f},{.44f,.28f},{.52f,.7f},{.6f,.42f},{.68f,.58f},{.76f,.46f},{.84f,.54f},{1,.5f} };
         for (int i = 0; i < 13; ++i) { auto q = juce::Point<float>(r.getX() + pts[i][0] * r.getWidth(), r.getY() + pts[i][1] * r.getHeight()); if (i == 0) p.startNewSubPath(q); else p.lineTo(q); }
@@ -128,20 +141,6 @@ public:
 };
 
 } // namespace ui
-
-// bottom status bar cell: icon + live text
-class StatusButton : public juce::Button {
-public:
-    StatusButton(const juce::String& iconName, const juce::String& t) : juce::Button(iconName), icon(iconName), label(t) {}
-    void setInfo(const juce::String& t) { if (t != label) { label = t; repaint(); } }
-    void paintButton(juce::Graphics& g, bool hl, bool) override {
-        auto r = getLocalBounds().toFloat(); const float h = r.getHeight();
-        ui::drawIcon(g, icon, r.removeFromLeft(h * 0.8f).reduced(h * 0.18f), ui::dim, 1.5f);
-        auto tr = r.withTrimmedLeft(h * 0.1f); g.setFont(ui::fitFont(label, h * 0.40f, tr.getWidth() - 2.f)); g.setColour(hl ? ui::text : ui::text.withAlpha(0.85f));
-        g.drawText(label, tr, juce::Justification::centredLeft);
-    }
-    juce::String icon, label;
-};
 
 // ------------------------------------------------------------------ look and feel
 struct RajvikLnF : juce::LookAndFeel_V4 {
@@ -232,73 +231,6 @@ struct RajvikLnF : juce::LookAndFeel_V4 {
     }
 };
 
-// ------------------------------------------------------------------ knob with caption / range labels / value read-out
-struct KnobGeom {
-    float cx = 0, cy = 0, r = 30;
-    juce::String cap; float capX = 0, capY = 0, capSize = 15, capW = 140; bool capLeft = false;
-    float valX = 0, valY = 0, valW = 90, valH = 24, valSize = 16; bool valBox = false;
-    juce::String lo, hi; float loX = 0, loY = 0, hiX = 0, hiY = 0;
-    bool valueOnDrag = false;   // show the value in place of the caption while dragging (used when there is no value box)
-};
-
-class KnobBox : public juce::Component {
-public:
-    using SA = juce::AudioProcessorValueTreeState;
-    juce::Slider s{ juce::Slider::RotaryHorizontalVerticalDrag, juce::Slider::NoTextBox };
-    juce::Label value; std::function<void()> onTouch; juce::String paramId;
-    KnobBox() {
-        s.setRotaryParameters(juce::MathConstants<float>::pi * 1.25f, juce::MathConstants<float>::pi * 2.75f, true);
-        s.setMouseDragSensitivity(200); s.setDoubleClickReturnValue(true, 0.0);
-        value.setJustificationType(juce::Justification::centred); value.setEditable(false, true, false);
-        value.setMinimumHorizontalScale(0.55f); value.setBorderSize(juce::BorderSize<int>(0, 1, 0, 1));
-        value.setColour(juce::Label::textColourId, ui::text);
-        value.onTextChange = [this] { s.setValue(s.getValueFromText(value.getText()), juce::sendNotificationSync); refresh(); };
-        s.onValueChange = [this] { refresh(); };
-        s.onDragStart = [this] { dragging = true; if (onTouch) onTouch(); repaint(); };
-        s.onDragEnd = [this] { dragging = false; repaint(); };
-        addAndMakeVisible(s); addAndMakeVisible(value); setInterceptsMouseClicks(false, true);
-    }
-    ~KnobBox() override { att.reset(); }
-    void bind(SA& a, const juce::String& id) {
-        att.reset(); att = std::make_unique<SA::SliderAttachment>(a, id, s); paramId = id;
-        if (auto* p = a.getParameter(id)) s.setDoubleClickReturnValue(true, p->convertFrom0to1(p->getDefaultValue()));   // double-click = default
-        refresh(); }
-    void refresh() { value.setText(s.getTextFromValue(s.getValue()), juce::dontSendNotification); }
-    // originImg: top-left of this box in design coordinates; scale: design px -> screen px
-    void setGeom(const KnobGeom& gm, juce::Point<float> originImg, float scale) { geom = gm; origin = originImg; sc = scale; resized(); repaint(); }
-    void resized() override {
-        const float k = sc;
-        auto L = [&](float x, float y) { return juce::Point<float>((x - origin.x) * k, (y - origin.y) * k); };
-        const float pad = geom.r * (1.f / 0.84f - 1.f);   // slider is a little larger than the knob so the glow ring is never clipped
-        s.setBounds(juce::Rectangle<float>(L(geom.cx - geom.r - pad, geom.cy - geom.r - pad), L(geom.cx + geom.r + pad, geom.cy + geom.r + pad)).toNearestInt());
-        value.setVisible(geom.valW > 0.f);
-        value.setBounds(juce::Rectangle<float>(L(geom.valX - geom.valW * 0.5f, geom.valY - geom.valH * 0.5f), L(geom.valX + geom.valW * 0.5f, geom.valY + geom.valH * 0.5f)).toNearestInt());
-        value.setFont(ui::font(geom.valSize * k));
-    }
-    void paint(juce::Graphics& g) override {
-        const float k = sc;
-        auto L = [&](float x, float y) { return juce::Point<float>((x - origin.x) * k, (y - origin.y) * k); };
-        if (geom.cap.isNotEmpty()) {
-            const juce::String t = (geom.valueOnDrag && dragging) ? s.getTextFromValue(s.getValue()) : geom.cap;
-            const float w = geom.capW * k, hh = geom.capSize * k * 1.6f;
-            g.setFont(ui::fitFont(t, geom.capSize * k, w)); g.setColour(geom.valueOnDrag && dragging ? ui::accent : ui::text.withAlpha(0.9f));
-            auto p = L(geom.capX, geom.capY);
-            g.drawText(t, juce::Rectangle<float>(geom.capLeft ? p.x : p.x - w * 0.5f, p.y - hh * 0.5f, w, hh), geom.capLeft ? juce::Justification::centredLeft : juce::Justification::centred);
-        }
-        g.setColour(ui::dim);
-        const float lw = 46.f * k;
-        if (geom.lo.isNotEmpty()) { auto p = L(geom.loX, geom.loY); g.setFont(ui::fitFont(geom.lo, 11.5f * k, lw)); g.drawText(geom.lo, juce::Rectangle<float>(p.x - lw * 0.5f, p.y - 8.f * k, lw, 16.f * k), juce::Justification::centred); }
-        if (geom.hi.isNotEmpty()) { auto p = L(geom.hiX, geom.hiY); g.setFont(ui::fitFont(geom.hi, 11.5f * k, lw)); g.drawText(geom.hi, juce::Rectangle<float>(p.x - lw * 0.5f, p.y - 8.f * k, lw, 16.f * k), juce::Justification::centred); }
-        if (geom.valBox && geom.valW > 0.f) {
-            auto vb = value.getBounds().toFloat(); g.setColour(ui::field); g.fillRoundedRectangle(vb, 4.f * k);
-            g.setColour(ui::fieldEdge); g.drawRoundedRectangle(vb.reduced(0.5f), 4.f * k, 1.f);
-        }
-    }
-private:
-    KnobGeom geom; juce::Point<float> origin; float sc = 0.75f; bool dragging = false; std::unique_ptr<SA::SliderAttachment> att;
-};
-
-
 // ------------------------------------------------------------------ FFT spectrum analyzer (4096-point, Hann, fast attack / slow release)
 class Analyzer {
 public:
@@ -336,113 +268,6 @@ public:
     }
 private:
     const AnalyzerFeed& feed; juce::dsp::FFT fft; std::vector<float> data; std::array<float, N> win{}; std::array<float, N / 2> db{}; unsigned lastW = 0; double sampleRate = 44100.0;
-};
-
-// ------------------------------------------------------------------ main graph: level history, gain reduction trace, transfer curve
-class DisplayComponent : public juce::Component {
-public:
-    explicit DisplayComponent(RajvikProcessor& p) : proc(p), anIn(p.anIn), anOut(p.anOut) { lastRead = proc.meters.w.load(); }
-    void pull() {
-        if (isVisible()) { anIn.update(proc.getSampleRate()); anOut.update(proc.getSampleRate()); }
-        const unsigned w = proc.meters.w.load(std::memory_order_acquire);
-        unsigned from = lastRead; if (w - from > MeterRing::N) from = w - MeterRing::N;
-        for (unsigned i = from; i != w; ++i) {
-            const auto k = i % MeterRing::N;
-            hist.push_back({ rdp::linToDb(proc.meters.in[k].load()), rdp::linToDb(proc.meters.out[k].load()), proc.meters.gr[k].load() });
-        }
-        lastRead = w;
-        while (hist.size() > 600) hist.erase(hist.begin());
-        if (!hist.empty()) { curIn = hist.back().in; curOut = hist.back().out; curGr = hist.back().gr; }
-        if (isVisible()) repaint();
-    }
-    float curIn = -100, curOut = -100, curGr = 0;
-    void paint(juce::Graphics& g) override {
-        const float k = ui::scaleOf(*this);
-        const juce::Rectangle<float> plot(40.f * k, 5.f * k, 1205.f * k, 268.f * k);
-        auto Y = [&](float db) { return plot.getY() + plot.getHeight() * (-std::clamp(db, -60.f, 0.f) / 60.f); };
-        auto X = [&](float db) { return plot.getX() + plot.getWidth() * ((std::clamp(db, -60.f, 0.f) + 60.f) / 60.f); };
-        g.setFont(ui::font(13.f * k));
-        for (int db = 0; db >= -60; db -= 6) {
-            g.setColour(ui::grid); g.drawHorizontalLine((int) Y((float) db), plot.getX(), plot.getRight());
-            g.setColour(ui::dim);
-            if (db != 0) g.drawText(juce::String(db), juce::Rectangle<float>(0.f, Y((float) db) - 8.f * k, 34.f * k, 16.f * k), juce::Justification::centredRight);
-            g.drawText(juce::String(db), juce::Rectangle<float>(plot.getRight() + 6.f * k, Y((float) db) - 8.f * k, 34.f * k, 16.f * k), juce::Justification::centredLeft);
-        }
-        g.setColour(ui::orange); g.setFont(ui::font(13.f * k, true)); g.drawText("GR", juce::Rectangle<float>(plot.getRight() - 10.f * k, plot.getY() - 6.f * k, 46.f * k, 14.f * k), juce::Justification::centredRight);
-
-        {   // scrolling waveform (peak envelope, mirrored): input grey, compressed output blue - lives in the lower part of the plot
-            const int nh = (int) hist.size();
-            if (nh > 1) {
-                const float cy = plot.getY() + plot.getHeight() * 0.80f, half = plot.getHeight() * 0.17f, dx = plot.getWidth() / 600.f, x0 = plot.getRight() - (float) nh * dx;
-                g.setColour(ui::grid); g.drawHorizontalLine((int) cy, plot.getX(), plot.getRight());
-                auto env = [&](bool useOut, juce::Path& pth) {
-                    for (int i = 0; i < nh; ++i) { const float a = std::min(1.f, rdp::dbToLin(useOut ? hist[(size_t) i].out : hist[(size_t) i].in)); const float x = x0 + (float) i * dx;
-                        if (i == 0) pth.startNewSubPath(x, cy - a * half); else pth.lineTo(x, cy - a * half); }
-                    for (int i = nh - 1; i >= 0; --i) { const float a = std::min(1.f, rdp::dbToLin(useOut ? hist[(size_t) i].out : hist[(size_t) i].in)); pth.lineTo(x0 + (float) i * dx, cy + a * half); }
-                    pth.closeSubPath(); };
-                juce::Path wi, wo; env(false, wi); env(true, wo);
-                g.setColour(juce::Colour(0xffb7bfcd).withAlpha(0.30f)); g.fillPath(wi);
-                g.setColour(ui::blue.withAlpha(0.65f)); g.fillPath(wo);
-            }
-        }
-        {   // live spectrum of the input (grey) and the compressed output (blue)
-            auto specY = [&](float dbv) { return Y(dbv + 30.f); };
-            juce::Path li, fi, lo, fo; anIn.build(plot, specY, li, fi); anOut.build(plot, specY, lo, fo);
-            g.setGradientFill(juce::ColourGradient(ui::blue.withAlpha(0.40f), 0.f, plot.getY(), ui::blue.withAlpha(0.03f), 0.f, plot.getBottom(), false)); g.fillPath(fo);
-            g.setGradientFill(juce::ColourGradient(juce::Colour(0xffb7bfcd).withAlpha(0.22f), 0.f, plot.getY(), juce::Colour(0xffb7bfcd).withAlpha(0.02f), 0.f, plot.getBottom(), false)); g.fillPath(fi);
-            g.setColour(juce::Colour(0xffb7bfcd).withAlpha(0.8f)); g.strokePath(li, juce::PathStrokeType(1.2f * k));
-            g.setColour(ui::blue); g.strokePath(lo, juce::PathStrokeType(1.5f * k));
-        }
-        const int n = (int) hist.size();
-        if (n > 1) {   // gain-reduction history (scrolls right to left)
-            const float dx = plot.getWidth() / 600.f, x0 = plot.getRight() - (float) n * dx; juce::Path gr, grFill;
-            for (int i = 0; i < n; ++i) {
-                const float x = x0 + (float) i * dx, yg = plot.getY() + 14.f * k + std::min(std::fabs(hist[(size_t) i].gr), 40.f) / 60.f * plot.getHeight();
-                if (i == 0) { gr.startNewSubPath(x, yg); grFill.startNewSubPath(x, plot.getY() + 14.f * k); grFill.lineTo(x, yg); } else { gr.lineTo(x, yg); grFill.lineTo(x, yg); }
-            }
-            grFill.lineTo(plot.getRight(), plot.getY() + 14.f * k); grFill.closeSubPath();
-            g.setColour(ui::orange.withAlpha(0.22f)); g.fillPath(grFill); g.setColour(ui::orange); g.strokePath(gr, juce::PathStrokeType(1.6f * k));
-        }
-        // transfer curve from the live parameters
-        auto& a = proc.apvts; const auto& m = rdp::kModes[(int) ui::getP(a, "mode")];
-        const float thr = ui::getP(a, "threshold"), ratio = ui::getP(a, "ratio"), rng = ui::getP(a, "range"), kneeP = ui::getP(a, "knee");
-        const float knee = std::clamp(kneeP + m.kneeAdd, 0.f, 72.f);
-        juce::Path tc;
-        for (int i = 0; i <= 240; ++i) {
-            const float db = -60.f + (float) i * 0.25f, o = db + rdp::staticGainDb(m.kind, db, thr, ratio, knee, rng);
-            if (i == 0) tc.startNewSubPath(X(db), Y(o)); else tc.lineTo(X(db), Y(o));
-        }
-        g.setColour(ui::accent.withAlpha(0.22f)); g.strokePath(tc, juce::PathStrokeType(5.f * k));
-        g.setColour(ui::accent); g.strokePath(tc, juce::PathStrokeType(2.f * k));
-        const float dash[] = { 4.f * k, 4.f * k }; g.setColour(ui::text.withAlpha(0.8f));
-        g.drawDashedLine(juce::Line<float>(X(thr), plot.getY(), X(thr), plot.getBottom()), dash, 2, 1.2f * k);
-        {   // knee read-out box
-            auto box = juce::Rectangle<float>(X(thr) + 2.f * k, plot.getY() + plot.getHeight() * 0.72f, 66.f * k, 40.f * k);
-            if (box.getRight() > plot.getRight()) box.setX(X(thr) - 68.f * k);
-            g.setColour(juce::Colour(0xe0111826)); g.fillRoundedRectangle(box, 4.f * k); g.setColour(ui::fieldEdge); g.drawRoundedRectangle(box, 4.f * k, 1.f);
-            g.setColour(ui::text); g.setFont(ui::font(13.f * k));
-            g.drawText("Knee", box.withTrimmedLeft(8.f * k).withHeight(box.getHeight() * 0.5f), juce::Justification::centredLeft);
-            g.drawText(juce::String(kneeP, 1) + " dB", box.withTrimmedLeft(8.f * k).withTrimmedTop(box.getHeight() * 0.5f), juce::Justification::centredLeft);
-        }
-        if (curIn > -59.f) {   // live operating point
-            const float px = X(curIn), py = Y(curOut);
-            g.setColour(ui::accent.withAlpha(0.3f)); g.fillEllipse(px - 8.f * k, py - 8.f * k, 16.f * k, 16.f * k); g.setColour(ui::accent); g.fillEllipse(px - 4.f * k, py - 4.f * k, 8.f * k, 8.f * k);
-        }
-        // legend
-        const float ly = plot.getBottom() + 22.f * k; g.setFont(ui::font(13.f * k));
-        auto item = [&](float absX, const juce::String& label, juce::Colour c, int kind) {
-            const float x = (absX - 30.f) * k; g.setColour(c);
-            if (kind == 0) g.fillRoundedRectangle(x, ly - 2.5f * k, 14.f * k, 5.f * k, 2.5f * k);
-            else if (kind == 1) { const float d2[] = { 3.f * k, 3.f * k }; g.drawDashedLine(juce::Line<float>(x, ly, x + 22.f * k, ly), d2, 2, 1.2f * k); }
-            else { const float d3[] = { 3.f * k, 3.f * k }; g.drawDashedLine(juce::Line<float>(x + 3.f * k, ly - 8.f * k, x + 3.f * k, ly + 8.f * k), d3, 2, 1.2f * k); }
-            g.setColour(ui::dim); g.drawText(label, juce::Rectangle<float>(x + (kind == 1 ? 34.f : 22.f) * k, ly - 9.f * k, 110.f * k, 18.f * k), juce::Justification::centredLeft);
-        };
-        item(70, "Input", juce::Colour(0xffb7bfcd), 0); item(151, "Output", ui::blue, 0); item(241, "Gain Reduction", ui::orange, 0);
-        item(379, "Knee", ui::dim, 1); item(483, "Threshold", ui::text, 2);
-    }
-private:
-    struct Frame { float in, out, gr; };
-    RajvikProcessor& proc; Analyzer anIn, anOut; std::vector<Frame> hist; unsigned lastRead = 0;
 };
 
 // ------------------------------------------------------------------ multiband display: log-frequency axis, 2-4 band regions, thresholds, GR bars, draggable crossovers
@@ -538,7 +363,7 @@ public:
         dragXo = dragThr = -1;
     }
 private:
-    juce::Rectangle<float> plot() const { const float k = ui::scaleOf(*this); return { 40.f * k, 5.f * k, 1205.f * k, 250.f * k }; }
+    juce::Rectangle<float> plot() const { const float k = ui::scaleOf(*this); return { 44.f * k, 40.f * k, (float) getWidth() - 62.f * k, 262.f * k }; }
     float fx(float f) const { auto pr = plot(); return pr.getX() + std::log(f / 20.f) / std::log(1000.f) * pr.getWidth(); }
     float xToF(float x) const { auto pr = plot(); return 20.f * std::pow(1000.f, std::clamp((x - pr.getX()) / pr.getWidth(), 0.f, 1.f)); }
     std::array<float, 3> crossovers(int n) const {   // same ordering rule as the DSP so the display always matches what you hear
@@ -551,65 +376,6 @@ private:
     Analyzer an; float grS[4] = {}, lvS[4] = { -100, -100, -100, -100 }; int dragXo = -1, dragThr = -1;
 };
 
-// ------------------------------------------------------------------ IN / OUT / GR meters
-class MeterStrip : public juce::Component {
-public:
-    float in = -100, out = -100, gr = 0, inHold = -100, outHold = -100, grMax = 0;
-    float mom = -100, sho = -100, integ = -100, tp = -100, rmsIn = -100, rmsOut = -100;
-    int outMode = 0;   // click the OUT read-out to cycle: peak / true-peak / RMS / LUFS-M / LUFS-S / LUFS-I
-    std::function<void()> onReset;
-    void update(float i, float o, float g) {
-        in = std::max(i, in - 1.4f); out = std::max(o, out - 1.4f); gr = (std::fabs(g) > std::fabs(gr) ? g : gr * 0.9f + g * 0.1f);
-        inHold = std::max(i, inHold - 0.12f); outHold = std::max(o, outHold - 0.12f); if (g < grMax) grMax = g; repaint();
-    }
-    void mouseDown(const juce::MouseEvent& e) override {
-        const float k = ui::scaleOf(*this);
-        if (e.position.y > 318.f * k && e.position.x > 80.f * k && e.position.x < 126.f * k) { outMode = (outMode + 1) % 6; repaint(); return; }
-        inHold = outHold = -100; grMax = 0; if (onReset) onReset();
-    }
-    juce::String outText() const {
-        auto f = [](float v) { return v <= -99.f ? juce::String("--") : juce::String(v, 1); };
-        switch (outMode) { case 1: return f(tp); case 2: return f(rmsOut); case 3: return f(mom); case 4: return f(sho); case 5: return f(integ); default: return f(outHold); }
-    }
-    juce::String outTag() const { static const char* t[] = { "", "TP", "RMS", "M", "S", "I" }; return t[outMode]; }
-    void paint(juce::Graphics& g) override {
-        const float k = ui::scaleOf(*this);
-        auto Y = [&](float db) { return (308.f - (std::clamp(db, -60.f, 5.f) + 60.f) * (270.f / 65.f)) * k; };   // local y (design: bars 38..308)
-        g.setFont(ui::font(14.f * k)); g.setColour(ui::text); g.drawText("IN", juce::Rectangle<float>(36.f * k, 4.f * k, 40.f * k, 20.f * k), juce::Justification::centred);
-        g.drawText("OUT", juce::Rectangle<float>(82.f * k, 4.f * k, 44.f * k, 20.f * k), juce::Justification::centred);
-        g.setColour(ui::orange); g.setFont(ui::font(14.f * k, true)); g.drawText("GR", juce::Rectangle<float>(128.f * k, 14.f * k, 44.f * k, 20.f * k), juce::Justification::centred);
-        g.setFont(ui::font(13.f * k)); g.setColour(ui::dim);
-        for (int db : { 0, -6, -12, -18, -24, -30, -36, -42, -48, -60 }) g.drawText(juce::String(db), juce::Rectangle<float>(0.f, Y((float) db) - 8.f * k, 34.f * k, 16.f * k), juce::Justification::centredRight);
-        auto bar = [&](float x, float level, float hold) {
-            auto b = juce::Rectangle<float>(x * k, 38.f * k, 23.f * k, 270.f * k);
-            g.setColour(juce::Colour(0xff080b11)); g.fillRoundedRectangle(b, 2.f * k);
-            const float top = Y(level);
-            if (top < b.getBottom()) {
-                { juce::ColourGradient cg(ui::orange, 0.f, Y(0.f), juce::Colour(0xff2fb84a), 0.f, Y(-30.f), false); cg.addColour(0.35, ui::accent); g.setGradientFill(cg); }
-                g.fillRoundedRectangle(b.withTop(top), 2.f * k);
-            }
-            g.setColour(ui::text); g.fillRect(b.getX(), Y(hold), b.getWidth(), 1.5f * k);
-            g.setColour(hold > 0.f ? ui::red : juce::Colour(0xff3a2226)); g.fillRect(b.getX() + 3.f * k, b.getY() + 1.f * k, b.getWidth() - 6.f * k, 2.f * k);
-        };
-        bar(45.f, in, inHold); bar(92.f, out, outHold);
-        {   // gain reduction bar grows from the top
-            auto b = juce::Rectangle<float>(140.f * k, 38.f * k, 23.f * k, 270.f * k); g.setColour(juce::Colour(0xff080b11)); g.fillRoundedRectangle(b, 2.f * k);
-            const float h = std::min(std::fabs(gr), 60.f) / 60.f * b.getHeight();
-            g.setGradientFill(juce::ColourGradient(ui::accent, 0.f, b.getY(), ui::orange, 0.f, b.getY() + std::max(h, 1.f), false)); g.fillRoundedRectangle(b.withHeight(h), 2.f * k);
-        }
-        g.setFont(ui::font(15.f * k)); g.setColour(ui::text);
-        auto num = [&](float cx, const juce::String& t) { g.drawText(t, juce::Rectangle<float>((cx - 28.f) * k, 316.f * k, 56.f * k, 22.f * k), juce::Justification::centred); };
-        num(57.f, inHold <= -99.f ? "--" : juce::String(inHold, 1)); num(104.f, outText());
-        if (outMode > 0) { g.setFont(ui::font(10.f * k)); g.setColour(ui::accent); g.drawText(outTag(), juce::Rectangle<float>(82.f * k, 336.f * k, 44.f * k, 12.f * k), juce::Justification::centred); }
-        auto box = [&](float y, const juce::String& t, bool hi) {
-            auto r = juce::Rectangle<float>(141.f * k, y * k, 28.f * k, 19.f * k);
-            g.setColour(ui::field); g.fillRoundedRectangle(r, 3.f * k); g.setColour(hi ? ui::accent : ui::fieldEdge); g.drawRoundedRectangle(r.reduced(0.5f), 3.f * k, 1.f);
-            g.setFont(ui::font(12.5f * k)); g.setColour(ui::text); g.drawText(t, r, juce::Justification::centred);
-        };
-        box(316.f, juce::String(gr, 1), false); box(337.f, juce::String(grMax, 1), true);
-    }
-};
-
 // ------------------------------------------------------------------ sidechain EQ: 6 draggable nodes, per-band coloured curves
 class EqGraph : public juce::Component {
 public:
@@ -618,8 +384,8 @@ public:
     int numBands() const { return 2 + (int) ui::getP(apvts, "eqBands"); }
     void paint(juce::Graphics& g) override {
         const float k = ui::scaleOf(*this); auto pr = plot(); auto r = getLocalBounds().toFloat();
-        g.setColour(ui::field); g.fillRoundedRectangle(r, 8.f * k); g.setColour(ui::panelEdge); g.drawRoundedRectangle(r.reduced(0.5f), 8.f * k, 1.f);
-        g.setFont(ui::font(12.f * k));
+        g.setColour(juce::Colour(0xff101013)); g.fillRoundedRectangle(r, 4.f * k); g.setColour(ui::panelEdge); g.drawRoundedRectangle(r.reduced(0.5f), 4.f * k, 1.f);
+        g.setFont(ui::font(11.f * k));
         for (float d : { 12.f, 6.f, 0.f, -6.f, -12.f }) {
             g.setColour(d == 0.f ? ui::faint : ui::grid); g.drawHorizontalLine((int) gy(d), pr.getX(), pr.getRight());
             g.setColour(ui::dim); g.drawText((d > 0 ? "+" : "") + juce::String((int) d), juce::Rectangle<float>(2.f * k, gy(d) - 8.f * k, pr.getX() - 8.f * k, 16.f * k), juce::Justification::centredRight);
@@ -661,14 +427,20 @@ public:
         for (int i = 0; i < numBands(); ++i) { const float d = nodePos(i).getDistanceFrom(e.position); if (d < best) { best = d; drag = i; } }
         if (drag < 0) return;
         sel = drag; if (onSelect) onSelect();
-        ids.clear(); const auto n = juce::String(drag + 1); ids.add("eqFreq" + n); if (!rdp::eqIsCut(band(drag).type)) ids.add("eqGain" + n);
+        if (e.mods.isPopupMenu()) {   // right-click a node: filter type menu
+            juce::PopupMenu m; const char* tn[] = { "High-pass", "Low shelf", "Bell", "High shelf", "Low-pass", "All-pass" }; const int cur = band(drag).type; const auto idn = "eqType" + juce::String(drag + 1);
+            for (int t = 0; t < 6; ++t) m.addItem(t + 1, tn[t], true, t == cur);
+            m.showMenuAsync(juce::PopupMenu::Options(), [this, idn](int r) { if (r > 0) { ui::gesture(apvts, idn, true); ui::setP(apvts, idn, (float) (r - 1)); ui::gesture(apvts, idn, false); if (onSelect) onSelect(); } });
+            drag = -1; return;
+        }
+        ids.clear(); const auto n = juce::String(drag + 1); ids.add("eqFreq" + n); if (rdp::eqHasGain(band(drag).type)) ids.add("eqGain" + n);
         for (auto& id : ids) ui::gesture(apvts, id, true);
         mouseDrag(e);
     }
     void mouseDrag(const juce::MouseEvent& e) override {
         if (drag < 0) return; const auto n = juce::String(drag + 1);
         ui::setP(apvts, "eqFreq" + n, xToF(e.position.x));
-        if (!rdp::eqIsCut(band(drag).type)) ui::setP(apvts, "eqGain" + n, std::clamp(yToDb(e.position.y), -18.f, 18.f));
+        if (rdp::eqHasGain(band(drag).type)) ui::setP(apvts, "eqGain" + n, std::clamp(yToDb(e.position.y), -18.f, 18.f));
     }
     void mouseUp(const juce::MouseEvent&) override { for (auto& id : ids) ui::gesture(apvts, id, false); ids.clear(); drag = -1; }
     void mouseDoubleClick(const juce::MouseEvent& e) override {   // double-click a node = band on/off
@@ -692,60 +464,7 @@ private:
     float xToF(float x) const { auto pr = plot(); return 20.f * std::pow(1000.f, std::clamp((x - pr.getX()) / pr.getWidth(), 0.f, 1.f)); }
     float gy(float db) const { auto pr = plot(); return pr.getY() + (12.f - db) / 24.f * pr.getHeight(); }
     float yToDb(float y) const { auto pr = plot(); return 12.f - (y - pr.getY()) / pr.getHeight() * 24.f; }
-    juce::Point<float> nodePos(int i) const { const auto b = band(i); return { fx(b.freq), gy(rdp::eqIsCut(b.type) ? 0.f : std::clamp(b.gain, -12.f, 12.f)) }; }
+    juce::Point<float> nodePos(int i) const { const auto b = band(i); return { fx(b.freq), gy(rdp::eqHasGain(b.type) ? std::clamp(b.gain, -12.f, 12.f) : 0.f) }; }
     RajvikProcessor& proc; juce::AudioProcessorValueTreeState& apvts; int& sel; std::function<void()> onSelect; Analyzer anPre, anPost; int drag = -1; juce::StringArray ids;
 };
 
-// ------------------------------------------------------------------ sidechain EQ band table (type / freq / gain-or-slope / on / next type)
-class EqTable : public juce::Component {
-public:
-    EqTable(RajvikProcessor& p, int& selRef, std::function<void()> onSel) : apvts(p.apvts), sel(selRef), onSelect(std::move(onSel)) {}
-    void paint(juce::Graphics& g) override {
-        const float k = ui::scaleOf(*this), u = (float) getWidth() / 338.f; auto r = getLocalBounds().toFloat();
-        g.setColour(ui::panel); g.fillRoundedRectangle(r, 8.f * k); g.setColour(ui::panelEdge); g.drawRoundedRectangle(r.reduced(0.5f), 8.f * k, 1.f);
-        const int nb = 2 + (int) ui::getP(apvts, "eqBands"); static const char* tn[] = { "HPF", "Low Shelf", "Bell", "High Shelf", "LPF" };
-        for (int i = 0; i < 6; ++i) {
-            const auto n = juce::String(i + 1); const float cy = rowY(i); const bool inUse = i < nb, on = ui::getP(apvts, "eqOn" + n) > 0.5f; const int type = (int) ui::getP(apvts, "eqType" + n);
-            const float a = (inUse && on) ? 1.f : 0.4f; const float rh = rowH();
-            if (i == sel) { g.setColour(ui::accent.withAlpha(0.07f)); g.fillRoundedRectangle(6.f * u, cy - rh * 0.5f, r.getWidth() - 12.f * u, rh, 4.f * k); }
-            g.setColour(inUse ? ui::eqCol[i].withAlpha(on ? 1.f : 0.4f) : ui::faint); g.fillEllipse(18.f * u - 5.f * k, cy - 5.f * k, 10.f * k, 10.f * k);
-            g.setFont(ui::font(14.f * k)); g.setColour(ui::text.withAlpha(a));
-            g.drawText(n, juce::Rectangle<float>(32.f * u, cy - 10.f * k, 18.f * u, 20.f * k), juce::Justification::centredLeft);
-            g.drawText(tn[type], juce::Rectangle<float>(56.f * u, cy - 10.f * k, 80.f * u, 20.f * k), juce::Justification::centredLeft);
-            g.drawText(rdp::freqText(ui::getP(apvts, "eqFreq" + n)), juce::Rectangle<float>(142.f * u, cy - 10.f * k, 68.f * u, 20.f * k), juce::Justification::centredLeft);
-            const juce::String gt = rdp::eqIsCut(type) ? juce::String(12 << (int) ui::getP(apvts, "eqSlope" + n)) + " dB" : juce::String(ui::getP(apvts, "eqGain" + n), 1) + " dB";
-            g.drawText(gt, juce::Rectangle<float>(213.f * u, cy - 10.f * k, 60.f * u, 20.f * k), juce::Justification::centredLeft);
-            ui::drawIcon(g, "power", juce::Rectangle<float>(283.f * u - 9.f * k, cy - 9.f * k, 18.f * k, 18.f * k), on ? ui::accent : ui::faint, 1.5f * k);
-            ui::drawIcon(g, type == rdp::EqBell ? "tBell" : (type == rdp::EqLowShelf || type == rdp::EqHighShelf ? "tShelf" : "tCut"),
-                juce::Rectangle<float>(315.f * u - 10.f * k, cy - 10.f * k, 20.f * k, 20.f * k), ui::dim.withAlpha(a), 1.4f * k);
-        }
-    }
-    void mouseDown(const juce::MouseEvent& e) override {
-        const float u = (float) getWidth() / 338.f; row = std::clamp((int) ((e.position.y - margin()) / rowH()), 0, 5); const auto n = juce::String(row + 1); zone = 0; moved = false;
-        sel = row; if (onSelect) onSelect();
-        const float x = e.position.x / u;
-        if (x > 268.f && x < 302.f) { const auto id = "eqOn" + n; ui::gesture(apvts, id, true); ui::setP(apvts, id, ui::getP(apvts, id) > 0.5f ? 0.f : 1.f); ui::gesture(apvts, id, false); }
-        else if (x >= 302.f) { const auto id = "eqType" + n; ui::gesture(apvts, id, true); ui::setP(apvts, id, (float) (((int) ui::getP(apvts, id) + 1) % 5)); ui::gesture(apvts, id, false); }
-        else if (x >= 135.f && x < 205.f) { zone = 1; startV = ui::getP(apvts, "eqFreq" + n); ui::gesture(apvts, "eqFreq" + n, true); }
-        else if (x >= 205.f) { zone = 2; startV = ui::getP(apvts, "eqGain" + n); ui::gesture(apvts, "eqGain" + n, true); }
-        repaint();
-    }
-    void mouseDrag(const juce::MouseEvent& e) override {
-        if (zone == 0) return; const float u = (float) getWidth() / 338.f, dy = (float) e.getDistanceFromDragStartY(); const auto n = juce::String(row + 1);
-        if (std::fabs(dy) > 2.f) moved = true;
-        if (zone == 1) ui::setP(apvts, "eqFreq" + n, std::clamp(startV * std::pow(2.f, -dy / (30.f * u)), 20.f, 20000.f));
-        else if (!rdp::eqIsCut((int) ui::getP(apvts, "eqType" + n))) ui::setP(apvts, "eqGain" + n, std::clamp(startV - dy * 0.1f / u, -18.f, 18.f));
-    }
-    void mouseUp(const juce::MouseEvent&) override {
-        if (zone == 0) return; const auto n = juce::String(row + 1);
-        ui::gesture(apvts, zone == 1 ? "eqFreq" + n : "eqGain" + n, false);
-        if (zone == 2 && !moved && rdp::eqIsCut((int) ui::getP(apvts, "eqType" + n))) {   // click on a cut filter's slope = cycle 12/24/48
-            const auto id = "eqSlope" + n; ui::gesture(apvts, id, true); ui::setP(apvts, id, (float) (((int) ui::getP(apvts, id) + 1) % 3)); ui::gesture(apvts, id, false); }
-        zone = 0;
-    }
-private:
-    float margin() const { return (float) getHeight() * 14.6f / 205.f; }
-    float rowH() const { return ((float) getHeight() - 2.f * margin()) / 6.f; }
-    float rowY(int i) const { return margin() + rowH() * ((float) i + 0.5f); }
-    juce::AudioProcessorValueTreeState& apvts; int& sel; std::function<void()> onSelect; int row = 0, zone = 0; float startV = 0; bool moved = false;
-};

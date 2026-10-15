@@ -35,7 +35,13 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     addF("ratio", "Ratio", skew(1.f, 100.f, 6.f), 4.f, ":1");
     addF("attack", "Attack", skew(0.01f, 500.f, 10.f), 10.f, " ms", -1);
     addF("release", "Release", skew(1.f, 5000.f, 150.f), 120.f, " ms");
-    addF("mix", "Mix", NR(0.f, 100.f, 0.1f), 100.f, " %", 0);
+    addF("mix", "Mix", NR(0.f, 200.f, 1.f), 100.f, " %", 0);      // scales the gain change: 0 % = none, 100 % = normal, 200 % = double
+    addF("dry", "Dry Gain", NR(-60.f, 12.f, 0.1f), -60.f, " dB");  // dry level for parallel compression (-60 = off)
+    addF("wetPan", "Wet Pan", NR(-100.f, 100.f, 1.f), 0.f, " %", 0);   // Mid/Side mode: -100 = Mid only, +100 = Side only
+    addF("dryPan", "Dry Pan", NR(-100.f, 100.f, 1.f), 0.f, " %", 0);
+    addB("autoThr", "Auto Threshold", false);                      // threshold follows the signal level
+    addB("charPost", "Character Post", true);                      // true = saturation after compression, false = before
+    addB("lookOn", "Lookahead On", true);
     addF("knee", "Knee", NR(0.f, 72.f, 0.1f), 6.f, " dB");
     addF("range", "Range", NR(0.f, 60.f, 0.1f), 40.f, " dB");
     addF("hold", "Hold", NR(0.f, 500.f, 0.1f), 0.f, " ms", 0);
@@ -59,7 +65,7 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
 
     // ---- sidechain section ----
     addB("scOn", "Sidechain Processing", true);
-    addC("scExternal", "Sidechain Source", { "Internal", "External" }, 0);
+    addC("scExternal", "Sidechain Source", { "Internal", "External", "MIDI" }, 0);
     addC("scRoute", "Sidechain Routing", { "Stereo", "Mid", "Side" }, 0);
     addF("scLevel", "Sidechain Level", NR(-24.f, 24.f, 0.1f), 0.f, " dB");
     addB("scListen", "SC Listen", false);
@@ -72,11 +78,12 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     for (int i = 0; i < kEqBands; ++i) {
         const auto n = juce::String(i + 1);
         addB("eqOn" + n, "EQ " + n + " On", true);
-        addC("eqType" + n, "EQ " + n + " Type", { "HPF", "Low Shelf", "Bell", "High Shelf", "LPF" }, eqTypeDef[i]);
+        addC("eqType" + n, "EQ " + n + " Type", { "HPF", "Low Shelf", "Bell", "High Shelf", "LPF", "All-Pass" }, eqTypeDef[i]);
         addFreq("eqFreq" + n, "EQ " + n + " Freq", eqFreqDef[i]);
         addF("eqGain" + n, "EQ " + n + " Gain", NR(-18.f, 18.f, 0.1f), 0.f, " dB");
         addF("eqQ" + n, "EQ " + n + " Q", skew(0.1f, 10.f, 1.f), eqQDef[i], "", 2);
-        addC("eqSlope" + n, "EQ " + n + " Slope", { "12 dB", "24 dB", "48 dB" }, 1);
+        addC("eqSlope" + n, "EQ " + n + " Slope", { "12 dB", "24 dB", "48 dB", "96 dB" }, 1);
+        addC("eqMs" + n, "EQ " + n + " Channel", { "Stereo", "Mid", "Side" }, 0);
     }
 
     // ---- multiband (up to 4 bands) ----

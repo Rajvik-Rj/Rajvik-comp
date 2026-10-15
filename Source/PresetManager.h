@@ -53,7 +53,7 @@ private:
         add("Warm Opto", "Acoustic Instruments", {{"mode",2},{"threshold",-22},{"ratio",3},{"attack",20},{"release",300},{"character",1},{"drive",6}});
         add("Pick Control", "Guitar and Bass", {{"mode",8},{"threshold",-20},{"ratio",4},{"attack",10},{"release",120}});
         add("Rise Up", "Creative Effects", {{"mode",10},{"threshold",-45},{"ratio",3},{"attack",20},{"release",300}});
-        add("Parallel Drums", "Parallel Compression", {{"mode",1},{"threshold",-34},{"ratio",8},{"attack",5},{"release",100},{"mix",40}});
+        add("Parallel Drums", "Parallel Compression", {{"mode",1},{"threshold",-34},{"ratio",8},{"attack",5},{"release",100},{"dry",-6}});
         // ---- multiband: mbOn=1; mbBands index 0/1/2 = 2/3/4 bands ----
         add("Master 4-Band Glue", "Multiband", {{"mode",4},{"mbOn",1},{"mbBands",2},{"mbX1",120},{"mbX2",1200},{"mbX3",6000},
             {"mbThr1",-22},{"mbRatio1",2.5f},{"mbAtk1",40},{"mbRel1",250},{"mbThr2",-20},{"mbRatio2",2},{"mbAtk2",25},{"mbRel2",200},
