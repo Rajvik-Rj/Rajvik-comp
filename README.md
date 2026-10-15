@@ -50,7 +50,7 @@ CMake can't fetch JUCE -> check git/network. MSVC C++20 errors -> use VS 2022 17
 
 Switch **Single / Multiband** next to the Style menu. Linkwitz-Riley 4th-order crossovers (phase-aligned, sums flat to 0.001 dB), one compressor per band.
 Per band: threshold, ratio, attack, release, make-up gain, solo, mute, bypass. Shared by all bands: style, knee, range, hold, lookahead, detector,
-stereo link / Mid-Side, sidechain section (external sidechain is split into the same bands), mix, in/out gain, auto gain, saturation.
+stereo link / Mid-Side, sidechain section except the sidechain EQ, which is single-band only (external sidechain is split into the same bands), mix, in/out gain, auto gain, saturation.
 In multiband mode the Threshold/Ratio/Attack/Release knobs edit the **selected band**. Tempo-sync is single-band only.
 Display: drag white handles = crossovers, drag a band's dashed line = threshold, orange bars = live gain reduction per band.
 
@@ -69,3 +69,15 @@ without access to JUCE in the authoring environment - build it with CMake + JUCE
 - main display: **Input** (grey) and **Output** (blue) spectrum + gain-reduction history + transfer curve with knee/threshold;
 - sidechain EQ graph: detector spectrum **before** (grey line) and **after** (white) the EQ, plus the 6 band curves - so you can see the EQ acting on what the compressor hears;
 - multiband display: input spectrum behind the band regions.
+
+
+## UI v2 (graphite layout, modelled on the reference page)
+Full-bleed level display (input history, red GR trace, transfer curve + threshold line), ringed knobs with AUTO toggles (green ring = detector level),
+curved Knee/Range/Lookahead/Hold sliders, Style pill + CHARACTER panel (Off/Tube/Diode/Bright, Drive, Pre/Post), SIDE CHAIN panel (listen, level, trigger
+Internal/External/MIDI/Host tempo, stereo link, M/S, 6-band EQ with per-band type/freq/gain/Q/slope/channel), preset browser with search + tags, Help hints,
+enlarge button, status bar (MIDI Learn, Oversampling, Lookahead, Mix, In, Out). Multiband is reachable via the status-bar button.
+New DSP/params: Auto Threshold, Mix 0-200 % (gain-change scale, single band), Dry, character Pre/Post, lookahead on/off, MIDI trigger,
+All-pass band + 96 dB brickwall slope, per-band Stereo/Mid/Side.
+**Not done:** immersive/surround (stereo/mono only), AU/CLAP/AAX formats, Instance List (needs the other vendor's plug-ins).
+Screenshot tool: `cmake -B build -DRDP_BUILD_SHOT=ON` then `xvfb-run build/RdpShot_artefacts/Release/RdpShot outdir`.
+The plug-in now compiles on Linux (JUCE 8.0.6, GCC 13); not yet loaded in a DAW.

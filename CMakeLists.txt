@@ -36,3 +36,12 @@ if(RDP_BUILD_PLUGIN)
   target_link_libraries(RajvikDynamicsPro PRIVATE juce::juce_audio_utils juce::juce_dsp
     PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_lto_flags juce::juce_recommended_warning_flags)
 endif()
+
+# Optional dev tool: renders the editor to PNG (cmake -DRDP_BUILD_SHOT=ON, run under xvfb-run)
+option(RDP_BUILD_SHOT "Build the screenshot tool" OFF)
+if(RDP_BUILD_PLUGIN AND RDP_BUILD_SHOT)
+  juce_add_console_app(RdpShot PRODUCT_NAME "RdpShot")
+  target_sources(RdpShot PRIVATE Tools/Shot.cpp)
+  target_compile_definitions(RdpShot PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_MODAL_LOOPS_PERMITTED=1)
+  target_link_libraries(RdpShot PRIVATE RajvikDynamicsPro juce::juce_audio_utils juce::juce_dsp juce::juce_recommended_config_flags)
+endif()
