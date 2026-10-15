@@ -34,5 +34,6 @@ int main(int argc, char** argv)
     e->setSidechainOpen(true); feed(p, 30, ph); save(*ed, out.getChildFile("sidechain.png"));
     e->setSidechainOpen(false); e->setHelpOn(true); feed(p, 4, ph); save(*ed, out.getChildFile("help.png"));
     e->setHelpOn(false); ed->setSize(440, 264); feed(p, 4, ph); save(*ed, out.getChildFile("small.png"));
+    ed->setSize(1000, 600); set("mbOn", 1); feed(p, 40, ph); save(*ed, out.getChildFile("multiband.png"));
     ed.reset(); return 0;
 }
