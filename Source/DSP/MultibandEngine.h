@@ -42,6 +42,7 @@ public:
         }
         for (int b = 0; b < n; ++b) gateT[b] = set[b].mute ? 0.f : (anySolo ? (set[b].solo ? 1.f : 0.f) : 1.f);
     }
+    void setMasterScale(float s) noexcept { scale = s; }   // master Mix: scales the gain change of every band (0 .. 2)
     int bands() const noexcept { return n; }
     // x: audio samples (already lookahead-delayed / M-S encoded); d: detector source (same encoding).
     // shared == true when d is identical to x (saves the second split). nCh = 1 or 2.
@@ -54,7 +55,7 @@ public:
         for (int c = 0; c < nCh; ++c) wet[c] = listen[c] = 0.f;
         for (int b = 0; b < n; ++b) {
             float dd[2] = { Dp[0][b], nCh > 1 ? Dp[1][b] : 0.f }, g[2] = { 1.f, 1.f };
-            if (!set[b].bypass) { eng[b].process(dd, nCh, g); gr[b] = eng[b].getGainDb(); } else gr[b] = 0.f;
+            if (!set[b].bypass) { eng[b].process(dd, nCh, g); if (scale != 1.f) for (int c = 0; c < nCh; ++c) g[c] = dbToLin(linToDb(g[c]) * scale); gr[b] = eng[b].getGainDb() * scale; } else gr[b] = 0.f;
             if (nCh > 1) { if (!active[1]) g[1] = 1.f; }
             if (!active[0]) g[0] = 1.f;
             mk[b] += (mkT[b] - mk[b]) * smooth; gate[b] += (gateT[b] - gate[b]) * smooth;
@@ -72,6 +73,6 @@ private:
     double sampleRate = 44100; int n = 4; bool anySolo = false;
     BandSplitter audio, det; CompressorEngine eng[kMax]; BandSettings set[kMax];
     float mk[kMax] = {}, mkT[kMax] = {}, gate[kMax] = {}, gateT[kMax] = {}, gr[kMax] = {}, lvl[kMax] = {};
-    float smooth = 0.01f, lvlDecay = 0.999f;
+    float smooth = 0.01f, lvlDecay = 0.999f, scale = 1.f;
 };
 } // namespace rdp
