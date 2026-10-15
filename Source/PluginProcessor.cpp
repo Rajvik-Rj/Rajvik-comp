@@ -128,7 +128,7 @@ void RajvikProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
             const auto& q = mbP[b];
             bs[b] = { *q.thr, *q.ratio, *q.atk, *q.rel, *q.gain, *q.solo > 0.5f, *q.mute > 0.5f, *q.byp > 0.5f };
         }
-        mb.setup(nb, xo, ep, bs);
+        mb.setup(nb, xo, ep, bs); mb.setMasterScale(*prm.mix * 0.01f);
     }
     mbShared = mbActive && lookS == 0 && !extSc && !eqRun && routeMode == 0 && detGain == 1.f;
 
@@ -274,6 +274,9 @@ void RajvikProcessor::processChunk(juce::AudioBuffer<float>& main, int start, in
         if (msOn) {   // Mid/Side: wet and dry each have their own Mid <-> Side balance
             auto pan = [](float* v, float p) { const float m = (v[0] + v[1]) * 0.5f * (p > 0.f ? 1.f - p : 1.f), s = (v[0] - v[1]) * 0.5f * (p < 0.f ? 1.f + p : 1.f); v[0] = m + s; v[1] = m - s; };
             pan(yd, *prm.dryPan * 0.01f); pan(yw, *prm.wetPan * 0.01f);
+        } else if (nCh == 2) {   // Left/Right: -100 % = left only, +100 % = right only
+            auto bal = [](float* v, float p) { v[0] *= (p > 0.f ? 1.f - p : 1.f); v[1] *= (p < 0.f ? 1.f + p : 1.f); };
+            bal(yd, *prm.dryPan * 0.01f); bal(yw, *prm.wetPan * 0.01f);
         }
         for (int c = 0; c < nCh; ++c) {
             const float y = yd[c] + yw[c];

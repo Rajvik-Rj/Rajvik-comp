@@ -37,10 +37,10 @@ private:
     pro::ProKnob thr, ratio, atk, rel, gain, dry; pro::CurveSlider knee, range, look, hold;
     pro::PillButton stylePill; std::unique_ptr<juce::Button> charIcon, scToggle; pro::CharacterPanel charPanel;
     // status bar
-    std::unique_ptr<juce::Button> midiItem, osItem, lookItem; juce::TextButton mbBtn{ "Multiband" }; pro::DragValue mixV, inV, outV; ui::IconButton gearBtn{ "gear" };
+    std::unique_ptr<juce::Button> midiItem, osItem, lookItem, detItem; pro::ProKnob mbMix; juce::TextButton mbBtn{ "Multiband" }; pro::DragValue mixV, inV, outV; ui::IconButton gearBtn{ "gear" };
     // side chain panel
     ui::IconButton listenBtn{ "phones" }, trig[4] = { ui::IconButton("trigInt"), ui::IconButton("trigExt"), ui::IconButton("trigMidi"), ui::IconButton("trigTempo") };
-    pro::DragValue scLevelV, wetPanV, dryPanV; double lastWet = 0; pro::VSlider scLevelSl; pro::ProKnob linkKnob;
+    pro::DragValue scLevelV; pro::ProKnob wetPan, dryPan; pro::Segmented stereoSeg; double lastWet = 0; pro::VSlider scLevelSl; pro::ProKnob linkKnob;
     pro::PillButton stereoPill, midBtn{ "M" }, sideBtn{ "S" }, invertBtn{ "INVERT" }, peakBtn{ "PEAK" }, rmsBtn{ "RMS" }, scOnBtn{ "SC ON" }, eqOnBtn{ "EQ" };
     juce::ComboBox routeBox, eqBandsBox;
     EqGraph eqGraph;

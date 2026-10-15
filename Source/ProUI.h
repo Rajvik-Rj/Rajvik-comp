@@ -73,7 +73,11 @@ public:
         const Point<float> dot(c.x + std::sin(ang) * arcR, c.y - std::cos(ang) * arcR);
         g.setColour(Colour(0xff0d0d10)); g.fillEllipse(dot.x - 4.f * k, dot.y - 4.f * k, 8.f * k, 8.f * k);
         g.setColour(cYellow); g.fillEllipse(dot.x - 2.9f * k, dot.y - 2.9f * k, 5.8f * k, 5.8f * k);
-        if (isMouseButtonDown()) { g.setColour(cText); g.setFont(F(std::max(9.f, bodyR * 0.36f), true)); g.drawText(getTextFromValue(getValue()), Rectangle<float>(c.x - bodyR, c.y - bodyR * 0.3f, bodyR * 2.f, bodyR * 0.6f), Justification::centred); }
+        {   // value read-out in the knob centre (always visible, shrinks to fit)
+            const String vt = getTextFromValue(getValue()); float fh = std::max(8.f, bodyR * 0.36f);
+            while (fh > 6.f && textW(vt, F(fh, true)) > bodyR * 1.75f) fh -= 0.5f;
+            g.setColour(isMouseButtonDown() ? cYellow : cText.withAlpha(0.85f)); g.setFont(F(fh, true)); g.drawText(vt, Rectangle<float>(c.x - bodyR, c.y - bodyR * 0.4f, bodyR * 2.f, bodyR * 0.8f), Justification::centred);
+        }
         // caption: [AUTO] CAPTION  (AUTO is a toggle)
         const auto f = F(10.5f * k, true, 0.08f); g.setFont(f);
         const float wa = autoWord.isNotEmpty() ? textW(autoWord, f) : 0.f, wc = textW(caption, f), gap = autoWord.isNotEmpty() ? 5.f * k : 0.f, x0 = (b.getWidth() - (wa + gap + wc)) * 0.5f, ty = D + 3.f * k;
@@ -104,7 +108,7 @@ public:
         if (pos > 0.004f) { g.setColour(cYellow.withAlpha(0.2f)); g.strokePath(v, PathStrokeType(6.f * k, PathStrokeType::curved, PathStrokeType::rounded)); g.setColour(cYellow); g.strokePath(v, PathStrokeType(3.2f * k, PathStrokeType::curved, PathStrokeType::rounded)); }
         g.setColour(Colour(0xff0d0d10)); g.fillEllipse(xv - 4.4f * k, yAt(xv) - 4.4f * k, 8.8f * k, 8.8f * k); g.setColour(cYellow); g.fillEllipse(xv - 3.2f * k, yAt(xv) - 3.2f * k, 6.4f * k, 6.4f * k);
         const bool drag = isMouseButtonDown(); g.setFont(F(10.f * k, true, 0.08f)); g.setColour(drag ? cYellow : (isMouseOver() ? Colours::white : cText.withAlpha(0.9f)));
-        g.drawText(drag ? getTextFromValue(getValue()) : caption, Rectangle<float>(0.f, b.getBottom() - lh, b.getWidth(), lh), Justification::centred);
+        g.drawText(drag ? getTextFromValue(getValue()) : caption + "  " + getTextFromValue(getValue()), Rectangle<float>(0.f, b.getBottom() - lh, b.getWidth(), lh), Justification::centred);
     }
 private:
     double defaultV = 0; std::unique_ptr<SA::SliderAttachment> att;
