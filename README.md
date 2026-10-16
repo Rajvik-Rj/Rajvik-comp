@@ -76,7 +76,7 @@ Full-bleed level display (input history, red GR trace, transfer curve + threshol
 curved Knee/Range/Lookahead/Hold sliders, Style pill + CHARACTER panel (Off/Tube/Diode/Bright, Drive, Pre/Post), SIDE CHAIN panel (listen, level, trigger
 Internal/External/MIDI/Host tempo, stereo link, M/S, 6-band EQ with per-band type/freq/gain/Q/slope/channel), preset browser with search + tags, Help hints,
 enlarge button, status bar (MIDI Learn, Oversampling, Lookahead, Mix, In, Out). Multiband is reachable via the status-bar button.
-New DSP/params: Auto Threshold, Mix 0-200 % (gain-change scale, single band), Dry, character Pre/Post, lookahead on/off, MIDI trigger,
+New DSP/params: Auto Threshold, Mix 0-100 % (overall dry/wet after everything), Dry, character Pre/Post, lookahead on/off, MIDI trigger,
 All-pass band + 96 dB brickwall slope, per-band Stereo/Mid/Side.
 **Not done:** immersive/surround (stereo/mono only), AU/CLAP/AAX formats, Instance List (needs the other vendor's plug-ins).
 Screenshot tool: `cmake -B build -DRDP_BUILD_SHOT=ON` then `xvfb-run build/RdpShot_artefacts/Release/RdpShot outdir`.
