@@ -96,7 +96,7 @@ private:
     std::array<int, 5> osLat{};
     int lastOs = -2, maxBlock = 512;
     double sr = 44100;
-    juce::SmoothedValue<float> inSm, outSm, mixSm, mkSm;
+    juce::SmoothedValue<float> inSm, outSm, mixSm, mkSm, mixAllSm;
     int lookS = 0, osIdx = -1, osLatNow = 0, chrIdx = 0, routeMode = 0; bool listen = false, extSc = false, msOn = false, autoOn = false;
     unsigned anWr = 0, anWrOut = 0; bool mbActive = false, mbShared = false, scOnNow = true, eqRun = false, procCh[2] = { true, true }; float detGain = 1.f;
     // tempo sync

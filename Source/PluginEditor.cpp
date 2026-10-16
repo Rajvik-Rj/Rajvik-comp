@@ -114,7 +114,7 @@ RajvikEditor::RajvikEditor(RajvikProcessor& p)
     stylePill.onClick = [this] {
         juce::PopupMenu m; const bool mb = mbShown; const auto id = mb ? "mbMode" + juce::String(selBand + 1) : juce::String("mode"); const int cur = (int) ui::getP(proc.apvts, id);
         if (mb) { m.addSectionHeader("Style of band " + juce::String(selBand + 1)); m.addItem(1, "Follow main style", true, cur == 0); }
-        for (int i = 0; i < rdp::kNumModes; ++i) { const int v = mb ? i + 1 : i; m.addItem(v + 1, juce::String(rdp::kModes[i].name) + "   -   " + rdp::kModes[i].description, true, v == cur); }
+        for (int i = 0; i < rdp::kNumModes; ++i) { const int v = mb ? i + 1 : i; m.addItem(v + 1, rdp::kModes[i].name, true, v == cur); }
         m.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&stylePill).withMinimumWidth(360), [this, id](int r) { if (r > 0) { ui::gesture(proc.apvts, id, true); ui::setP(proc.apvts, id, (float) (r - 1)); ui::gesture(proc.apvts, id, false); } });
     };
     charIcon->onClick = [this] { showCharacterPanel(!charPanel.isVisible()); };
@@ -139,7 +139,7 @@ RajvikEditor::RajvikEditor(RajvikProcessor& p)
         for (int i = 0; i < 3; ++i) m.addItem(i + 1, n[i], true, i == cur);
         m.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(detItem.get()), [this](int r) { if (r > 0) { ui::gesture(proc.apvts, "detector", true); ui::setP(proc.apvts, "detector", (float) (r - 1)); ui::gesture(proc.apvts, "detector", false); } });
     };
-    mbMix.caption = "MASTER MIX"; mbMix.bind(a, "mix");
+    mbMix.caption = "MIX"; mbMix.bind(a, "mix");
     mbBtn.setClickingTogglesState(false);
     mbBtn.onClick = [this] { const bool on = ui::getP(proc.apvts, "mbOn") > 0.5f; ui::gesture(proc.apvts, "mbOn", true); ui::setP(proc.apvts, "mbOn", on ? 0.f : 1.f); ui::gesture(proc.apvts, "mbOn", false); };
     mixV.bind(a, "mix"); inV.bind(a, "inGain"); outV.bind(a, "outGain"); mixV.prefix = ""; inV.prefix = ""; outV.prefix = "";
@@ -183,7 +183,15 @@ RajvikEditor::RajvikEditor(RajvikProcessor& p)
     startTimerHz(30);
 }
 
-RajvikEditor::~RajvikEditor() { stopTimer(); proc.metersWanted = false; proc.cancelLearn(); setLookAndFeel(nullptr); }
+void RajvikEditor::closeOverlays()
+{
+    juce::PopupMenu::dismissAllActiveMenus();
+    if (auto* b = dynamic_cast<juce::CallOutBox*>(openBox.getComponent())) b->dismiss();
+    if (auto* a = dynamic_cast<juce::AlertWindow*>(openAlert.getComponent())) a->exitModalState(0);
+    openBox = nullptr; openAlert = nullptr;
+}
+
+RajvikEditor::~RajvikEditor() { stopTimer(); closeOverlays(); proc.metersWanted = false; proc.cancelLearn(); setLookAndFeel(nullptr); }
 
 void RajvikEditor::bindMainKnobs()
 {
@@ -272,11 +280,11 @@ void RajvikEditor::registerHints()
         { &knee, "Knee: width of the soft transition around the threshold." }, { &range, "Range: the maximum amount of gain change in dB." },
         { &look, "Lookahead: delays the audio so the compressor can react before a peak arrives. Reports latency to the host." },
         { &hold, "Hold: how long the gain reduction is held before the release starts." },
-        { &stylePill, "Style: one of 14 program-dependent compression styles. Click to choose." },
+        { &stylePill, "Style: click to choose one of the 14 compression styles." },
         { charIcon.get(), "Character: analog saturation (Tube, Diode, Bright) with drive and Pre / Post compression routing." },
         { scToggle.get(), "Side chain: open the trigger section with the side chain EQ, trigger source and stereo link." },
         { &meter, "Meters: input and output peak levels, gain reduction on the left. Click the output read-out to cycle peak, true peak, RMS and LUFS." },
-        { &guiBtn, "GUI settings: window size from tiny to huge, default size, custom size." }, { &presetBtn, "Preset browser: search by name or tag." }, { &mixV, "Mix: scales the gain change from 0 % to 200 %." }, { &mbMix, "Master mix: scales the gain change of all bands together (0 % to 200 %)." }, { detItem.get(), "Detector: Style default, Peak or RMS. Applies to single band and multiband." },
+        { &guiBtn, "GUI settings: window size from tiny to huge, default size, custom size." }, { &presetBtn, "Preset browser: search by name or tag." }, { &mixV, "Mix: overall dry/wet after everything in the plug-in (0 % = unprocessed, 100 % = fully processed)." }, { &mbMix, "Mix: overall dry/wet of the whole plug-in, after all bands (0 % to 100 %)." }, { detItem.get(), "Detector: Style default, Peak or RMS. Applies to single band and multiband." },
         { &inV, "Input gain." }, { &outV, "Output gain." },
         { &eqGraph, "Side chain EQ: drag nodes to shape what the compressor hears. Right-click a node for the filter type, double-click to switch a band on / off, wheel changes Q." },
         { &linkKnob, "Stereo link: 0 % compresses each channel independently, 100 % uses a single common gain." },
@@ -288,9 +296,10 @@ void RajvikEditor::registerHints()
 
 void RajvikEditor::showPresets()
 {
-    auto box = std::make_unique<PresetBrowser>(proc, [this](const juce::String& n) { presetName = n; presetBtn.setButtonText(n); presetBtn.repaint(); },
-                                               [this] { promptSave(); });
-    juce::CallOutBox::launchAsynchronously(std::move(box), presetBtn.getScreenBounds(), nullptr);
+    juce::Component::SafePointer<RajvikEditor> self(this);
+    auto box = std::make_unique<PresetBrowser>(proc, [self](const juce::String& n) { if (self == nullptr) return; self->presetName = n; self->presetBtn.setButtonText(n); self->presetBtn.repaint(); },
+                                               [self] { if (self != nullptr) self->promptSave(); });
+    closeOverlays(); openBox = &juce::CallOutBox::launchAsynchronously(std::move(box), presetBtn.getScreenBounds(), nullptr);
 }
 void RajvikEditor::stepPreset(int dir)
 {
@@ -301,7 +310,7 @@ void RajvikEditor::stepPreset(int dir)
 void RajvikEditor::promptSave()
 {
     auto* aw = new juce::AlertWindow("Save preset", "Preset name:", juce::MessageBoxIconType::NoIcon);
-    aw->addTextEditor("name", presetName); aw->addButton("Save", 1); aw->addButton("Cancel", 0);
+    openAlert = aw; aw->addTextEditor("name", presetName); aw->addButton("Save", 1); aw->addButton("Cancel", 0);
     juce::Component::SafePointer<RajvikEditor> self(this);
     aw->enterModalState(true, juce::ModalCallbackFunction::create([self, aw](int r) {
         if (r == 1 && self != nullptr) { self->proc.presets.saveUser(aw->getTextEditorContents("name")); self->presetName = aw->getTextEditorContents("name"); self->presetBtn.setButtonText(self->presetName); }
@@ -319,7 +328,7 @@ void RajvikEditor::showSettings()
             default: proc.undo.beginNewTransaction("Reset"); proc.presets.resetToDefaults(); break;
         }
     });
-    juce::CallOutBox::launchAsynchronously(std::move(panel), gearBtn.getScreenBounds(), nullptr);
+    closeOverlays(); openBox = &juce::CallOutBox::launchAsynchronously(std::move(panel), gearBtn.getScreenBounds(), nullptr);
 }
 juce::File RajvikEditor::sizeFile() { return rdp::PresetManager::userDir().getParentDirectory().getChildFile("gui_default_width.txt"); }
 int RajvikEditor::loadDefaultW() { auto f = sizeFile(); const int w = f.existsAsFile() ? f.loadFileAsString().getIntValue() : 0; return juce::jlimit(220, 4400, w > 0 ? w : 1000); }
@@ -340,7 +349,7 @@ void RajvikEditor::showGuiMenu()
         else if (r == 4) { helpOn = !helpOn; hint = {}; repaint(); }
         else if (r == 10) {
             auto* aw = new juce::AlertWindow("Custom size", "Window width in pixels (220 - 4400):", juce::MessageBoxIconType::NoIcon);
-            aw->addTextEditor("w", juce::String(getWidth())); aw->addButton("OK", 1); aw->addButton("Cancel", 0);
+            openAlert = aw; aw->addTextEditor("w", juce::String(getWidth())); aw->addButton("OK", 1); aw->addButton("Cancel", 0);
             juce::Component::SafePointer<RajvikEditor> self(this);
             aw->enterModalState(true, juce::ModalCallbackFunction::create([self, aw](int res) {
                 if (res == 1 && self != nullptr) { const int w = juce::jlimit(220, 4400, aw->getTextEditorContents("w").getIntValue()); self->setSize(w, juce::roundToInt((float) w * self->canvasH() / 1100.f)); }

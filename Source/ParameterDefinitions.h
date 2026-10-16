@@ -35,7 +35,7 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     addF("ratio", "Ratio", skew(1.f, 100.f, 6.f), 4.f, ":1");
     addF("attack", "Attack", skew(0.01f, 500.f, 10.f), 10.f, " ms", -1);
     addF("release", "Release", skew(1.f, 5000.f, 150.f), 120.f, " ms");
-    addF("mix", "Mix", NR(0.f, 200.f, 1.f), 100.f, " %", 0);      // scales the gain change: 0 % = none, 100 % = normal, 200 % = double
+    addF("mix", "Mix", NR(0.f, 100.f, 1.f), 100.f, " %", 0);        // overall dry/wet after everything: 0 % = unprocessed, 100 % = fully processed
     addF("dry", "Dry Gain", NR(-60.f, 12.f, 0.1f), -60.f, " dB");  // dry level for parallel compression (-60 = off)
     addF("wetPan", "Wet Pan", NR(-100.f, 100.f, 1.f), 0.f, " %", 0);   // Mid/Side mode: -100 = Mid only, +100 = Side only
     addF("dryPan", "Dry Pan", NR(-100.f, 100.f, 1.f), 0.f, " %", 0);

@@ -18,7 +18,7 @@ private:
     using SA = juce::AudioProcessorValueTreeState;
     void timerCallback() override;
     void bindMainKnobs(); void bindBandControls(); void bindEqBand(); void onBandSelected(); void onEqSelected(); void applyModeLayout(); void applyLayoutVisibility();
-    void showSettings(); void showGuiMenu(); static juce::File sizeFile(); static int loadDefaultW(); void showPresets(); void promptSave(); void stepPreset(int dir); void setTrigger(int t); int triggerNow() const;
+    void showSettings(); void closeOverlays(); void showGuiMenu(); static juce::File sizeFile(); static int loadDefaultW(); void showPresets(); void promptSave(); void stepPreset(int dir); void setTrigger(int t); int triggerNow() const;
     void registerHints(); void setScalePercent(int pct); float canvasH() const { return scOpen ? 920.f : 660.f; }
     float k() const { return (float) getWidth() / 1100.f; }
     juce::Rectangle<int> Ri(float x, float y, float w, float h) const { return juce::Rectangle<float>(x * k(), y * k(), w * k(), h * k()).toNearestInt(); }
@@ -50,5 +50,5 @@ private:
     std::unique_ptr<SA::ButtonAttachment> listenA, invertA, midA, sideA, soloA, muteA, bypA, scOnA, eqOnA, bOnA;
     std::unique_ptr<SA::SliderAttachment> bandGainA, scLevelA;
     std::vector<std::pair<juce::Component*, juce::String>> hints;
-    float scRing = -100.f, extSm = 0.f;
+    float scRing = -100.f, extSm = 0.f; juce::Component::SafePointer<juce::Component> openBox, openAlert;
 };

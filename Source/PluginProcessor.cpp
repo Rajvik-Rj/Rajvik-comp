@@ -55,7 +55,7 @@ void RajvikProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
         os[(size_t) i]->initProcessing((size_t) maxBlock);
         osLat[(size_t) i] = (int) std::round(os[(size_t) i]->getLatencyInSamples());
     }
-    for (auto* s : { &inSm, &outSm, &mixSm, &mkSm }) { s->reset(sr, 0.02); s->setCurrentAndTargetValue(1.f); }
+    for (auto* s : { &inSm, &outSm, &mixSm, &mkSm, &mixAllSm }) { s->reset(sr, 0.02); s->setCurrentAndTargetValue(1.f); }
     pIn = pOut = 0; lastOs = -2;
 }
 
@@ -114,7 +114,7 @@ void RajvikProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     if (totalLat != getLatencySamples()) setLatencySamples(totalLat);
     scOnNow = *prm.scOn > 0.5f;
     listen = *prm.scListen > 0.5f;
-    extSc = scOnNow && (int) *prm.scExt == 1 && scCh > 0; trigMidi = scOnNow && (int) *prm.scExt == 2; gcScale = *prm.mix * 0.01f;
+    extSc = scOnNow && (int) *prm.scExt == 1 && scCh > 0; trigMidi = scOnNow && (int) *prm.scExt == 2;
     msOn = *prm.stMode > 0.5f && nCh == 2;
     routeMode = (scOnNow && !msOn && nCh == 2) ? (int) *prm.scRoute : 0;          // Mid / Side detector routing (stereo mode only)
     detGain = scOnNow ? dbToLin(*prm.scLevel) * (*prm.scInvert > 0.5f ? -1.f : 1.f) : 1.f;
@@ -131,7 +131,7 @@ void RajvikProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
             const auto& q = mbP[b];
             bs[b] = { *q.thr, *q.ratio, *q.atk, *q.rel, *q.gain, *q.solo > 0.5f, *q.mute > 0.5f, *q.byp > 0.5f, (int) *q.mode };
         }
-        mb.setup(nb, xo, ep, bs); mb.setMasterScale(*prm.mix * 0.01f);
+        mb.setup(nb, xo, ep, bs); 
     }
     mbShared = mbActive && lookS == 0 && !extSc && !eqRun && routeMode == 0 && detGain == 1.f;
 
@@ -150,6 +150,7 @@ void RajvikProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
 
     inSm.setTargetValue(dbToLin(*prm.inG));
     outSm.setTargetValue(dbToLin(*prm.outG));
+    mixAllSm.setTargetValue(*prm.mix * 0.01f);
     mixSm.setTargetValue(*prm.dry <= -59.9f ? 0.f : dbToLin(*prm.dry));
     autoOn = *prm.autoGain > 0.5f;
     if (!autoOn) { mkSm.setTargetValue(1.f); pIn = pOut = 0; }
@@ -281,8 +282,9 @@ void RajvikProcessor::processChunk(juce::AudioBuffer<float>& main, int start, in
             auto bal = [](float* v, float p) { v[0] *= (p > 0.f ? 1.f - p : 1.f); v[1] *= (p < 0.f ? 1.f + p : 1.f); };
             bal(yd, *prm.dryPan * 0.01f); bal(yw, *prm.wetPan * 0.01f);
         }
+        const float ma = listen ? 1.f : mixAllSm.getNextValue();   // overall dry/wet, after everything
         for (int c = 0; c < nCh; ++c) {
-            const float y = yd[c] + yw[c];
+            const float y = dp[c][i] * (1.f - ma) + (yd[c] + yw[c]) * ma;
             main.getWritePointer(c)[start + i] = y; ym += y;
             outPk = std::max(outPk, std::fabs(y));
             if (mw) outSq += (double) y * y;
