@@ -99,6 +99,7 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
         addF("mbAtk" + n, nm + "Attack", skew(0.01f, 500.f, 10.f), atkDef[b], " ms", -1);
         addF("mbRel" + n, nm + "Release", skew(1.f, 5000.f, 150.f), relDef[b], " ms");
         addF("mbGain" + n, nm + "Gain", NR(-18.f, 18.f, 0.1f), 0.f, " dB");
+        { juce::StringArray sl; sl.add("Main style"); sl.addArray(modes); addC("mbMode" + n, nm + "Style", sl, 0); }   // each band can use its own compressor style
         addB("mbSolo" + n, nm + "Solo", false);
         addB("mbMute" + n, nm + "Mute", false);
         addB("mbByp" + n, nm + "Bypass", false);

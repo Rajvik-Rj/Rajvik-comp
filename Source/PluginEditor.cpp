@@ -112,9 +112,10 @@ RajvikEditor::RajvikEditor(RajvikProcessor& p)
 
     // ---- style pill + character ----
     stylePill.onClick = [this] {
-        juce::PopupMenu m; const int cur = (int) ui::getP(proc.apvts, "mode");
-        for (int i = 0; i < rdp::kNumModes; ++i) m.addItem(i + 1, juce::String(rdp::kModes[i].name) + "   -   " + rdp::kModes[i].description, true, i == cur);
-        m.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&stylePill).withMinimumWidth(360), [this](int r) { if (r > 0) { ui::gesture(proc.apvts, "mode", true); ui::setP(proc.apvts, "mode", (float) (r - 1)); ui::gesture(proc.apvts, "mode", false); } });
+        juce::PopupMenu m; const bool mb = mbShown; const auto id = mb ? "mbMode" + juce::String(selBand + 1) : juce::String("mode"); const int cur = (int) ui::getP(proc.apvts, id);
+        if (mb) { m.addSectionHeader("Style of band " + juce::String(selBand + 1)); m.addItem(1, "Follow main style", true, cur == 0); }
+        for (int i = 0; i < rdp::kNumModes; ++i) { const int v = mb ? i + 1 : i; m.addItem(v + 1, juce::String(rdp::kModes[i].name) + "   -   " + rdp::kModes[i].description, true, v == cur); }
+        m.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&stylePill).withMinimumWidth(360), [this, id](int r) { if (r > 0) { ui::gesture(proc.apvts, id, true); ui::setP(proc.apvts, id, (float) (r - 1)); ui::gesture(proc.apvts, id, false); } });
     };
     charIcon->onClick = [this] { showCharacterPanel(!charPanel.isVisible()); };
     scToggle->onClick = [this] { setSidechainOpen(!scOpen); };
@@ -359,7 +360,10 @@ void RajvikEditor::timerCallback()
     const bool mb = ui::getP(a, "mbOn") > 0.5f; if (mb != mbShown) applyModeLayout();
     const float scDb = proc.scMeter.load(); scRing = scDb > scRing ? scDb : scRing - 1.0f; thr.ring = juce::jlimit(0.f, 1.f, (scRing + 60.f) / 60.f);
     { const bool msm = ui::getP(a, "stereoMode") > 0.5f; const char* wc = msm ? "WET M/S" : "WET L/R"; const char* dc = msm ? "DRY M/S" : "DRY L/R"; if (wetPan.caption != wc) { wetPan.caption = wc; dryPan.caption = dc; wetPan.repaint(); dryPan.repaint(); } }
-    stylePill.text = rdp::kModes[(int) ui::getP(a, "mode")].name; stylePill.repaint();
+    { juce::String t = rdp::kModes[(int) ui::getP(a, "mode")].name;
+      if (mbShown) { const int v = (int) ui::getP(a, "mbMode" + juce::String(selBand + 1)); t = "B" + juce::String(selBand + 1) + ": " + (v == 0 ? t + " (main)" : juce::String(rdp::kModes[v - 1].name)); }
+      stylePill.text = t; stylePill.repaint(); }
+    extSm = std::max(proc.extPk.load(), extSm * 0.92f);
     static_cast<CharIcon*>(charIcon.get())->lit = ui::getP(a, "character") > 0.5f; charIcon->repaint();
     if (charPanel.isVisible()) charPanel.refresh();
     const char* osn[] = { "Off", "2x", "4x", "8x", "16x", "32x" };
@@ -394,20 +398,26 @@ void RajvikEditor::paint(juce::Graphics& g)
         g.setColour(juce::Colour(0x12ffffff)); g.fillRect(0.f, y0 + 1.f, W, 1.f);
         g.setColour(cDim); g.setFont(F(9.5f * s, true, 0.1f)); g.drawText("SC LEVEL", Ri(8, 826, 70, 14).toFloat(), juce::Justification::centredLeft);
         g.drawText(juce::String(scRing <= -99.f ? juce::String("--") : juce::String(scRing, 1)) + " dB", Ri(1008, 852, 88, 14).toFloat(), juce::Justification::centred);   // detector level
-        g.setColour(cFaint); g.setFont(F(9.f * s, true, 0.08f)); g.drawText("TRIGGER", Ri(46, 628, 100, 10).toFloat(), juce::Justification::centredLeft);
         {   // trigger indicator: lights up while the detector is making the compressor work
             const float gr = std::fabs(display.curGr), a = juce::jlimit(0.f, 1.f, gr / 6.f); const bool on = gr > 0.1f; const juce::Colour lc = juce::Colour(0xffe9474c);
-            auto led = Ri(46, 681, 10, 10).toFloat(); if (on) { g.setColour(lc.withAlpha(0.25f + 0.25f * a)); g.fillEllipse(led.expanded(4.f * s)); }
+            auto led = Ri(44, 633, 11, 11).toFloat(); if (on) { g.setColour(lc.withAlpha(0.25f + 0.25f * a)); g.fillEllipse(led.expanded(4.f * s)); }
             g.setColour(on ? lc.interpolatedWith(juce::Colour(0xffffa040), 1.f - a) : juce::Colour(0xff3a3a40)); g.fillEllipse(led);
-            g.setColour(on ? cText : cFaint); g.setFont(F(9.f * s, true, 0.08f)); g.drawText(on ? "TRIGGERED  " + juce::String(display.curGr, 1) + " dB" : "NOT TRIGGERED", Ri(60, 678, 110, 16).toFloat(), juce::Justification::centredLeft);
-            // detector level vs threshold
+            g.setColour(on ? cText : cFaint); g.setFont(F(9.f * s, true, 0.06f)); g.drawFittedText(on ? "TRIGGERED\n" + juce::String(display.curGr, 1) + " dB" : "NOT\nTRIGGERED", Ri(60, 626, 100, 26), juce::Justification::centredLeft, 2);
             auto bar = Ri(1008, 836, 88, 10).toFloat(); g.setColour(juce::Colour(0xff0c0c0f)); g.fillRoundedRectangle(bar, 3.f * s);
             const float thrDb = ui::getP(proc.apvts, "autoThr") > 0.5f ? proc.effThr.load() : ui::getP(proc.apvts, "threshold"), lvl = juce::jlimit(0.f, 1.f, (scRing + 60.f) / 60.f), tp = juce::jlimit(0.f, 1.f, (thrDb + 60.f) / 60.f);
             g.setColour(lvl > tp ? lc : cGreen); g.fillRoundedRectangle(bar.withWidth(bar.getWidth() * lvl), 3.f * s);
             g.setColour(juce::Colours::white); g.fillRect(bar.getX() + bar.getWidth() * tp - 1.f, bar.getY() - 2.f * s, 2.f, bar.getHeight() + 4.f * s);
-            g.setColour(cFaint); g.setFont(F(8.5f * s, true, 0.08f)); g.drawText("SC LEVEL / THRESHOLD", Ri(1008, 822, 88, 12).toFloat(), juce::Justification::centred);
+            g.setColour(cFaint); g.setFont(F(8.5f * s, true, 0.06f)); g.drawText("LEVEL / THRESHOLD", Ri(1008, 822, 88, 12).toFloat(), juce::Justification::centred);
         }
-        const char* src[] = { "Internal", "External", "MIDI", "Host tempo" }; g.setColour(cText.withAlpha(0.9f)); g.setFont(F(11.f * s)); g.drawText(src[triggerNow()], Ri(46, 664, 110, 16).toFloat(), juce::Justification::centredLeft);
+        {   // what the compressor is listening to
+            const int tg = triggerNow(); const bool mbm = mbShown; juce::String d; bool warn = false;
+            if (tg == 0) d = "Listens to THIS track" + juce::String(mbm ? " (side chain EQ is not used in multiband)." : ", through the side chain EQ below.");
+            else if (tg == 1) { if (extSm > 1e-5f) d = "Listens to the EXTERNAL side chain input - signal detected."; else { d = "EXTERNAL selected but no signal on the side chain input. Route a track to this plug-in's side chain in your DAW."; warn = true; } }
+            else if (tg == 2) d = "Compression is active while a MIDI note is held.";
+            else d = "Pulses with the host tempo. Click TEMPO again for rate / offset / pulse width.";
+            g.setColour(warn ? cRed : cText.withAlpha(0.85f)); g.setFont(F(11.f * s)); g.drawFittedText(d, Ri(536, 623, 462, 28), juce::Justification::centredLeft, 2);
+            g.setColour(cFaint.brighter(0.2f)); g.setFont(F(9.5f * s, true, 0.06f)); g.drawText("SIDE CHAIN EQ: trigger signal only", Ri(724, 656, 276, 24).toFloat(), juce::Justification::centredLeft);
+        }
     }
     // status bar
     const float sy = (canvasH() - 40.f) * s; g.setGradientFill(juce::ColourGradient(juce::Colour(0xff232328), 0.f, sy, juce::Colour(0xff17171a), 0.f, H, false)); g.fillRect(0.f, sy, W, H - sy);
@@ -419,6 +429,7 @@ void RajvikEditor::paint(juce::Graphics& g)
 void RajvikEditor::paintOverChildren(juce::Graphics& g)
 {
     const float s = k();
+    if (scOpen && mbShown) { g.setColour(juce::Colour(0xff111114).withAlpha(0.55f)); g.fillRect(Ri(168, 656, 832, 218)); g.setColour(cText); g.setFont(F(14.f * s, true)); g.drawText("Side chain EQ is only used in single band mode", Ri(168, 700, 832, 120).toFloat(), juce::Justification::centred); }
     if (helpOn) {   // hint bubble (like the context help of the reference plug-in)
         const juce::String text = hint.isEmpty() ? "Move the mouse over a control to see what it does." : hint;
         auto r = Ri(560, 52, 360, 100).toFloat(); const auto f = F(12.f * s); juce::AttributedString as; as.setJustification(juce::Justification::topLeft);
@@ -442,19 +453,19 @@ void RajvikEditor::resized()
     soloBtn.setBounds(Ri(300, 46, 36, 24)); muteBtn.setBounds(Ri(340, 46, 36, 24)); bypBtn.setBounds(Ri(380, 46, 46, 24)); bandsBox.setBounds(Ri(436, 46, 96, 24)); bandGain.setBounds(Ri(548, 46, 220, 24));
     // knob row (overlaid on the lower part of the display)
     thr.setBounds(Ri(112, 400, 156, 124)); ratio.setBounds(Ri(280, 426, 110, 100)); atk.setBounds(Ri(552, 426, 110, 100)); rel.setBounds(Ri(690, 426, 130, 100));
-    stylePill.setBounds(Ri(398, 438, 144, 32)); charIcon->setBounds(Ri(445, 476, 50, 22)); charPanel.setBounds(Ri(344, 296, 252, 124));
+    stylePill.setBounds(Ri(398, 438, 144, 32)); charIcon->setBounds(Ri(445, 476, 50, 22)); charPanel.setBounds(Ri(344, 290, 252, 132));
     gain.setBounds(Ri(826, 410, 100, 80)); dry.setBounds(Ri(826, 496, 100, 72)); wetPan.setBounds(Ri(930, 410, 100, 80)); dryPan.setBounds(Ri(930, 496, 100, 72)); stereoSeg.setBounds(Ri(262, 6, 112, 28));
     knee.setBounds(Ri(158, 556, 120, 38)); range.setBounds(Ri(290, 556, 120, 38)); scToggle->setBounds(Ri(412, 568, 116, 26)); look.setBounds(Ri(566, 556, 120, 38)); hold.setBounds(Ri(698, 556, 120, 38));
     // status bar
     midiItem->setBounds(Ri(14, sy + 8, 120, 24)); osItem->setBounds(Ri(180, sy + 8, 150, 24)); lookItem->setBounds(Ri(340, sy + 8, 170, 24)); detItem->setBounds(Ri(520, sy + 8, 140, 24)); mbMix.setBounds(Ri(4, 420, 104, 100)); mbBtn.setBounds(Ri(700, sy + 8, 90, 24));
     mixV.setBounds(Ri(846, sy + 8, 56, 24)); inV.setBounds(Ri(910, sy + 8, 64, 24)); outV.setBounds(Ri(978, sy + 8, 64, 24)); gearBtn.setBounds(Ri(1056, sy + 6, 30, 28));
     // side chain panel
-    listenBtn.setBounds(Ri(10, 628, 26, 26)); for (int i = 0; i < 4; ++i) trig[i].setBounds(Ri(46.f + (float) i * 25.f, 640, 24, 22));
+    listenBtn.setBounds(Ri(10, 628, 26, 26)); for (int i = 0; i < 4; ++i) trig[i].setBounds(Ri(168.f + (float) i * 90.f, 624, 86, 26));
     scLevelSl.setBounds(Ri(14, 664, 20, 150)); scLevelV.setBounds(Ri(2, 842, 54, 20));
     linkKnob.setBounds(Ri(66, 694, 90, 88)); midBtn.setBounds(Ri(58, 818, 48, 20)); sideBtn.setBounds(Ri(110, 818, 48, 20)); 
-    eqGraph.setBounds(Ri(168, 660, 832, 214));
-    bTypeBox.setBounds(Ri(168, 628, 104, 26)); bFreq.setBounds(Ri(280, 628, 108, 26)); bGain.setBounds(Ri(392, 628, 96, 26)); bQ.setBounds(Ri(492, 628, 80, 26)); bSlopeBox.setBounds(Ri(492, 628, 80, 26));
-    bChBox.setBounds(Ri(580, 628, 84, 26)); bOn.setBounds(Ri(672, 628, 44, 26));
+    eqGraph.setBounds(Ri(168, 684, 832, 190));
+    bTypeBox.setBounds(Ri(168, 656, 104, 24)); bFreq.setBounds(Ri(280, 656, 108, 24)); bGain.setBounds(Ri(392, 656, 96, 24)); bQ.setBounds(Ri(492, 656, 80, 24)); bSlopeBox.setBounds(Ri(492, 656, 80, 24));
+    bChBox.setBounds(Ri(580, 656, 84, 24)); bOn.setBounds(Ri(672, 656, 44, 24));
     scOnBtn.setBounds(Ri(1008, 630, 88, 22)); eqOnBtn.setBounds(Ri(1008, 658, 88, 22)); eqBandsBox.setBounds(Ri(1008, 688, 88, 24)); routeBox.setBounds(Ri(1008, 718, 88, 24));
     invertBtn.setBounds(Ri(1008, 750, 88, 22));
     // knob geometry the ProKnob uses depends on its own bounds only

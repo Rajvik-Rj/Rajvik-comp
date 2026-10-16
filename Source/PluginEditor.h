@@ -39,7 +39,7 @@ private:
     // status bar
     std::unique_ptr<juce::Button> midiItem, osItem, lookItem, detItem; pro::ProKnob mbMix; juce::TextButton mbBtn{ "Multiband" }; pro::DragValue mixV, inV, outV; ui::IconButton gearBtn{ "gear" };
     // side chain panel
-    ui::IconButton listenBtn{ "phones" }, trig[4] = { ui::IconButton("trigInt"), ui::IconButton("trigExt"), ui::IconButton("trigMidi"), ui::IconButton("trigTempo") };
+    ui::IconButton listenBtn{ "phones" }; pro::PillButton trig[4] = { pro::PillButton("INTERNAL"), pro::PillButton("EXTERNAL"), pro::PillButton("MIDI"), pro::PillButton("TEMPO") };
     pro::DragValue scLevelV; pro::ProKnob wetPan, dryPan; pro::Segmented stereoSeg; double lastWet = 0; pro::VSlider scLevelSl; pro::ProKnob linkKnob;
     pro::PillButton stereoPill, midBtn{ "M" }, sideBtn{ "S" }, invertBtn{ "INVERT" }, peakBtn{ "PEAK" }, rmsBtn{ "RMS" }, scOnBtn{ "SC ON" }, eqOnBtn{ "EQ" };
     juce::ComboBox routeBox, eqBandsBox;
@@ -50,5 +50,5 @@ private:
     std::unique_ptr<SA::ButtonAttachment> listenA, invertA, midA, sideA, soloA, muteA, bypA, scOnA, eqOnA, bOnA;
     std::unique_ptr<SA::SliderAttachment> bandGainA, scLevelA;
     std::vector<std::pair<juce::Component*, juce::String>> hints;
-    float scRing = -100.f;
+    float scRing = -100.f, extSm = 0.f;
 };

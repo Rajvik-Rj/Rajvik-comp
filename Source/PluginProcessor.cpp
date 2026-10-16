@@ -26,7 +26,7 @@ RajvikProcessor::RajvikProcessor()
     }
     for (int b = 0; b < 4; ++b) {
         const auto n = juce::String(b + 1);
-        mbP[b] = { r("mbThr" + n), r("mbRatio" + n), r("mbAtk" + n), r("mbRel" + n), r("mbGain" + n), r("mbSolo" + n), r("mbMute" + n), r("mbByp" + n) };
+        mbP[b] = { r("mbThr" + n), r("mbRatio" + n), r("mbAtk" + n), r("mbRel" + n), r("mbGain" + n), r("mbSolo" + n), r("mbMute" + n), r("mbByp" + n), r("mbMode" + n) };
         mbGr[(size_t) b] = 0.f; mbLvl[(size_t) b] = -100.f;
     }
     for (auto& c : ccMap) c.store(nullptr);
@@ -59,6 +59,8 @@ void RajvikProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     pIn = pOut = 0; lastOs = -2;
 }
 
+static float sb_peak(const float* p, int n) { float m = 0.f; for (int i = 0; i < n; ++i) m = std::max(m, std::fabs(p[i])); return m; }
+
 void RajvikProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
     juce::ScopedNoDenormals noDenormals;
@@ -86,6 +88,7 @@ void RajvikProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
         scCh = std::min(2, sb.getNumChannels());
         for (int c = 0; c < scCh; ++c) scPtr[c] = sb.getReadPointer(c);
     }
+    { float pk = 0.f; for (int c = 0; c < scCh; ++c) pk = std::max(pk, sb_peak(scPtr[c], nS)); extPk.store(pk, std::memory_order_relaxed); }
 
     // ---- parameters -> DSP (only recomputes when changed) ----
     const float autoLvlDb = 10.f * std::log10((float) std::max(autoPow, 1e-9));
@@ -126,7 +129,7 @@ void RajvikProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
         rdp::BandSettings bs[4];
         for (int b = 0; b < 4; ++b) {
             const auto& q = mbP[b];
-            bs[b] = { *q.thr, *q.ratio, *q.atk, *q.rel, *q.gain, *q.solo > 0.5f, *q.mute > 0.5f, *q.byp > 0.5f };
+            bs[b] = { *q.thr, *q.ratio, *q.atk, *q.rel, *q.gain, *q.solo > 0.5f, *q.mute > 0.5f, *q.byp > 0.5f, (int) *q.mode };
         }
         mb.setup(nb, xo, ep, bs); mb.setMasterScale(*prm.mix * 0.01f);
     }

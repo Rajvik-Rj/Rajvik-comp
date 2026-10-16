@@ -186,33 +186,43 @@ private:
     SA& apvts; String pid; StringArray items;
 };
 
+// ------------------------------------------------------------------ orange drive bar with value text
+class DriveBar : public Slider {
+public:
+    DriveBar() : Slider(LinearBar, NoTextBox) { setSliderSnapsToMousePosition(true); setMouseDragSensitivity(200); setDoubleClickReturnValue(true, 0.0); }
+    void paint(Graphics& g) override {
+        const float k = K(*this); auto r = getLocalBounds().toFloat(); g.setColour(Colour(0xff0c0c0f)); g.fillRoundedRectangle(r, 4.f * k);
+        const float p = (float) valueToProportionOfLength(getValue()); auto fill = r.withWidth(jmax(r.getWidth() * p, 6.f * k));
+        g.setGradientFill(ColourGradient(Colour(0xffe0752b), fill.getX(), 0.f, Colour(0xffa84a1e), fill.getRight(), 0.f, false)); g.fillRoundedRectangle(fill, 4.f * k);
+        g.setColour(Colour(0xff4a4a52)); g.drawRoundedRectangle(r.reduced(0.5f), 4.f * k, 1.f);
+        g.setColour(Colours::white); g.setFont(F(11.f * k, true)); g.drawText(getTextFromValue(getValue()), r, Justification::centred);
+    }
+};
+
 // ------------------------------------------------------------------ floating CHARACTER panel (mode, drive, pre/post)
 class CharacterPanel : public Component {
 public:
     explicit CharacterPanel(SA& a) : seg(a, "character", { "Off", "Tube", "Diode", "Bright" }), apvts(a) {
         addAndMakeVisible(seg); addAndMakeVisible(drive); addAndMakeVisible(post);
-        driveA = std::make_unique<SA::SliderAttachment>(a, "drive", drive); drive.setSliderStyle(Slider::LinearBar); drive.setTextBoxStyle(Slider::NoTextBox, false, 0, 0);
-        drive.setSliderSnapsToMousePosition(true); drive.setMouseDragSensitivity(200);
+        driveA = std::make_unique<SA::SliderAttachment>(a, "drive", drive); 
         post.led = true; post.onClick = [this] { const bool p = ui::getP(apvts, "charPost") > 0.5f; ui::gesture(apvts, "charPost", true); ui::setP(apvts, "charPost", p ? 0.f : 1.f); ui::gesture(apvts, "charPost", false); };
         setInterceptsMouseClicks(true, true);
     }
-    void refresh() { post.text = ui::getP(apvts, "charPost") > 0.5f ? "POST" : "PRE"; post.repaint(); drive.setEnabled(ui::getP(apvts, "character") > 0.5f); repaint(); }
+    void refresh() { post.text = ui::getP(apvts, "charPost") > 0.5f ? "POST" : "PRE"; post.repaint(); drive.setAlpha(ui::getP(apvts, "character") > 0.5f ? 1.f : 0.45f); repaint(); }
     void resized() override {
         const float k = K(*this); auto r = getLocalBounds().reduced(int(10 * k), int(10 * k)); r.removeFromTop(int(16 * k));
         seg.setBounds(r.removeFromTop(int(30 * k))); r.removeFromTop(int(10 * k));
-        auto row = r.removeFromTop(int(26 * k)); post.setBounds(row.removeFromRight(int(88 * k))); drive.setBounds(row.withTrimmedRight(int(10 * k)).reduced(0, int(6 * k)));
+        auto row = r.removeFromTop(int(28 * k)); post.setBounds(row.removeFromRight(int(88 * k))); drive.setBounds(row.withTrimmedRight(int(10 * k)));
     }
     void paint(Graphics& g) override {
         const float k = K(*this); auto r = getLocalBounds().toFloat().reduced(1.f);
         g.setColour(Colours::black.withAlpha(0.35f)); g.fillRoundedRectangle(r.translated(0.f, 3.f * k), 9.f * k);
         g.setGradientFill(ColourGradient(Colour(0xff34343a), 0.f, r.getY(), Colour(0xff202025), 0.f, r.getBottom(), false)); g.fillRoundedRectangle(r, 9.f * k);
         g.setColour(Colour(0xff55555d)); g.drawRoundedRectangle(r, 9.f * k, 1.f); g.setColour(cDim); g.setFont(F(10.5f * k, true, 0.12f)); g.drawText("CHARACTER", r.removeFromTop(24.f * k), Justification::centred);
-        auto dr = drive.getBounds().toFloat(); g.setColour(Colour(0xff111114)); g.fillRoundedRectangle(dr, 3.f * k);
-        const float p = (float) drive.valueToProportionOfLength(drive.getValue()); auto fill = dr.withWidth(dr.getWidth() * p);
-        g.setGradientFill(ColourGradient(Colour(0xffe0752b), fill.getX(), 0.f, Colour(0xffa84a1e), fill.getRight(), 0.f, false)); g.fillRoundedRectangle(fill, 3.f * k);
-        g.setColour(cDim); g.setFont(F(10.f * k, true, 0.1f)); g.drawText("DRIVE", dr.translated(0.f, dr.getHeight() + 2.f * k).withHeight(14.f * k), Justification::centred);
+        auto dr = drive.getBounds().toFloat();
+        g.setColour(cDim); g.setFont(F(10.f * k, true, 0.1f)); g.drawText(ui::getP(apvts, "character") > 0.5f ? "DRIVE  (drag or click)" : "DRIVE  (pick Tube / Diode / Bright)", dr.translated(0.f, dr.getHeight() + 3.f * k).withHeight(14.f * k).withWidth(dr.getWidth() + 90.f * k), Justification::centred);
     }
-    Segmented seg; Slider drive; PillButton post;
+    Segmented seg; DriveBar drive; PillButton post;
 private:
     SA& apvts; std::unique_ptr<SA::SliderAttachment> driveA;
 };
