@@ -6,6 +6,7 @@ namespace rdp {
 struct BandSettings {
     float thr = -18, ratio = 4, atk = 10, rel = 120, gainDb = 0;
     bool solo = false, mute = false, bypass = false;
+    int mode = 0;          // 0 = follow the main style, otherwise kModes index + 1
 };
 
 // Up to 4 independent compressors (one CompressorEngine per band) behind an LR4 crossover network.
@@ -35,7 +36,7 @@ public:
         anySolo = false;
         for (int b = 0; b < n; ++b) {
             set[b] = bs[b];
-            EngineParams ep = base; ep.thrDb = bs[b].thr; ep.ratio = bs[b].ratio; ep.atkMs = bs[b].atk; ep.relMs = bs[b].rel;
+            EngineParams ep = base; ep.thrDb = bs[b].thr; ep.ratio = bs[b].ratio; ep.atkMs = bs[b].atk; ep.relMs = bs[b].rel; if (bs[b].mode > 0) ep.mode = bs[b].mode - 1;
             eng[b].setParams(ep);
             mkT[b] = dbToLin(bs[b].gainDb);
             anySolo = anySolo || bs[b].solo;
