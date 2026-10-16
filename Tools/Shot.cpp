@@ -31,7 +31,7 @@ int main(int argc, char** argv)
     float ph = 0; ed->setSize(1000, 600); feed(p, 140, ph);
     save(*ed, out.getChildFile("main.png"));
     e->showCharacterPanel(true); feed(p, 4, ph); save(*ed, out.getChildFile("character.png")); e->showCharacterPanel(false);
-    e->setSidechainOpen(true); feed(p, 30, ph); save(*ed, out.getChildFile("sidechain.png"));
+    set("scExternal", 1); e->setSidechainOpen(true); feed(p, 30, ph); save(*ed, out.getChildFile("sidechain.png"));
     e->setSidechainOpen(false); e->setHelpOn(true); feed(p, 4, ph); save(*ed, out.getChildFile("help.png"));
     e->setHelpOn(false); ed->setSize(440, 264); feed(p, 4, ph); save(*ed, out.getChildFile("small.png"));
     ed->setSize(1000, 600); set("mbOn", 1); feed(p, 40, ph); save(*ed, out.getChildFile("multiband.png"));
