@@ -258,19 +258,71 @@ public:
             grFill.lineTo(W, gy0); grFill.closeSubPath(); g.setColour(cRed.withAlpha(0.10f)); g.fillPath(grFill);
             g.setColour(cRed.withAlpha(0.35f)); g.strokePath(gr, PathStrokeType(4.f * k)); g.setColour(cRed); g.strokePath(gr, PathStrokeType(1.4f * k));
         }
-        // transfer curve (input level on x, output level on y; axis shared with the meters)
-        auto& a = proc.apvts; const auto& m = rdp::kModes[(int) ui::getP(a, "mode")];
-        const float thr = ui::getP(a, "autoThr") > 0.5f ? proc.effThr.load() : ui::getP(a, "threshold"), ratio = ui::getP(a, "ratio"), rng = ui::getP(a, "range"), knee = jlimit(0.f, 72.f, ui::getP(a, "knee") + m.kneeAdd);
-        const float cw = W * 0.40f; auto X = [&](float db) { return jlimit(-60.f, 0.f, db) / 60.f * cw + cw; };
-        { const float dash[] = { 5.f * k, 5.f * k }; g.setColour(Colour(0x66ffffff)); g.drawDashedLine(Line<float>(0.f, yOf(thr), W, yOf(thr)), dash, 2, 1.f * k); }
-        Path tc; for (int i = 0; i <= 240; ++i) { const float db = -60.f + (float) i * 0.25f, o = db + rdp::staticGainDb(m.kind, db, thr, ratio, knee, rng); if (i == 0) tc.startNewSubPath(X(db), yOf(o)); else tc.lineTo(X(db), yOf(o)); }
-        g.setColour(cCurve.withAlpha(0.20f)); g.strokePath(tc, PathStrokeType(6.f * k)); g.setColour(cCurve); g.strokePath(tc, PathStrokeType(1.8f * k));
-        if (curIn > -59.f) { const float px = X(curIn), py = yOf(curOut); g.setColour(Colours::white.withAlpha(0.25f)); g.fillEllipse(px - 7.f * k, py - 7.f * k, 14.f * k, 14.f * k); g.setColour(Colours::white); g.fillEllipse(px - 3.f * k, py - 3.f * k, 6.f * k, 6.f * k); }
+        { auto& a = proc.apvts; const float thr = ui::getP(a, "autoThr") > 0.5f ? proc.effThr.load() : ui::getP(a, "threshold");
+          const float dash[] = { 5.f * k, 5.f * k }; g.setColour(Colour(0x66ffffff)); g.drawDashedLine(Line<float>(0.f, yOf(thr), W, yOf(thr)), dash, 2, 1.f * k); }
         g.setColour(Colour(0x55000000)); g.fillRect(0.f, H - 1.f, W, 1.f);
     }
 private:
     struct Frame { float in, out, gr; };
     RajvikProcessor& proc; std::vector<Frame> hist; unsigned lastRead = 0;
+};
+
+
+// ------------------------------------------------------------------ left panel: threshold / knee transfer-curve view (drag the line = threshold, drag the knee handle = knee)
+class KneePanel : public Component {
+public:
+    explicit KneePanel(RajvikProcessor& p) : proc(p) {}
+    float curIn = -100.f, curOut = -100.f;
+    Rectangle<float> plot() const { const float k = K(*this); return Rectangle<float>(30.f * k, 52.f * k, (float) getWidth() - 44.f * k, (float) getWidth() - 44.f * k); }
+    float thrNow() const { auto& a = proc.apvts; return ui::getP(a, "autoThr") > 0.5f ? proc.effThr.load() : ui::getP(a, "threshold"); }
+    float kneeNow() const { auto& a = proc.apvts; return jlimit(0.f, 72.f, ui::getP(a, "knee") + rdp::kModes[(int) ui::getP(a, "mode")].kneeAdd); }
+    float X(float db) const { auto r = plot(); return r.getX() + (jlimit(-60.f, 0.f, db) + 60.f) / 60.f * r.getWidth(); }
+    float Y(float db) const { auto r = plot(); return r.getBottom() - (jlimit(-60.f, 0.f, db) + 60.f) / 60.f * r.getHeight(); }
+    void paint(Graphics& g) override {
+        const float k = K(*this), W = (float) getWidth(), H = (float) getHeight(); auto r = plot();
+        g.setGradientFill(ColourGradient(Colour(0xff25252a), 0.f, 0.f, Colour(0xff17171a), 0.f, H, false)); g.fillAll();
+        g.setColour(cLine); g.fillRect(W - 1.f, 0.f, 1.f, H);
+        g.setColour(cDim); g.setFont(F(10.f * k, true, 0.1f)); g.drawText("THRESHOLD / KNEE", Rectangle<float>(0.f, 10.f * k, W, 14.f * k), Justification::centred);
+        g.setColour(Colour(0xff0d0d10)); g.fillRoundedRectangle(r, 3.f * k);
+        g.setFont(F(8.5f * k)); 
+        for (int db = -60; db <= 0; db += 12) { g.setColour(Colour(0x18ffffff)); g.fillRect(r.getX(), Y((float) db), r.getWidth(), 1.f); g.fillRect(X((float) db), r.getY(), 1.f, r.getHeight());
+            g.setColour(cDim); g.drawText(String(db), Rectangle<float>(0.f, Y((float) db) - 6.f * k, 27.f * k, 12.f * k), Justification::centredRight); }
+        auto& a = proc.apvts; const auto& m = rdp::kModes[(int) ui::getP(a, "mode")];
+        const float thr = thrNow(), kn = kneeNow(), ratio = ui::getP(a, "ratio"), rng = ui::getP(a, "range");
+        // knee zone (around the threshold, on both axes)
+        g.setColour(cYellow.withAlpha(0.10f)); g.fillRect(Rectangle<float>(r.getX(), Y(thr + kn * 0.5f), r.getWidth(), jmax(2.f, Y(thr - kn * 0.5f) - Y(thr + kn * 0.5f))).getIntersection(r));
+        g.setColour(Colour(0x30ffffff)); g.drawLine(r.getX(), r.getBottom(), r.getRight(), r.getY(), 1.f * k);   // 1:1 reference
+        const float dash[] = { 4.f * k, 4.f * k }; g.setColour(cYellow.withAlpha(0.8f)); g.drawDashedLine(Line<float>(r.getX(), Y(thr), r.getRight(), Y(thr)), dash, 2, 1.f * k);
+        g.drawDashedLine(Line<float>(X(thr), r.getY(), X(thr), r.getBottom()), dash, 2, 1.f * k);
+        Path tc; for (int i = 0; i <= 240; ++i) { const float db = -60.f + (float) i * 0.25f, o = db + rdp::staticGainDb(m.kind, db, thr, ratio, kn, rng); const float x = X(db), y = Y(o); if (i == 0) tc.startNewSubPath(x, y); else tc.lineTo(x, y); }
+        g.saveState(); g.reduceClipRegion(r.toNearestInt()); g.setColour(cCurve.withAlpha(0.2f)); g.strokePath(tc, PathStrokeType(5.f * k)); g.setColour(cCurve); g.strokePath(tc, PathStrokeType(1.8f * k));
+        if (curIn > -59.f) { const float px = X(curIn), py = Y(curOut); g.setColour(Colours::white.withAlpha(0.25f)); g.fillEllipse(px - 6.f * k, py - 6.f * k, 12.f * k, 12.f * k); g.setColour(Colours::white); g.fillEllipse(px - 2.5f * k, py - 2.5f * k, 5.f * k, 5.f * k); }
+        g.restoreState();
+        // handles
+        g.setColour(cYellow); g.fillEllipse(r.getRight() - 6.f * k, Y(thr) - 4.f * k, 8.f * k, 8.f * k);
+        g.setColour(Colours::white); g.fillRoundedRectangle(Rectangle<float>(7.f * k, 7.f * k).withCentre({ r.getX() + 8.f * k, Y(thr + kn * 0.5f) }), 1.5f * k);
+        g.setColour(cDim); g.setFont(F(8.5f * k)); g.drawText("IN", Rectangle<float>(r.getX(), r.getBottom() + 2.f * k, r.getWidth(), 11.f * k), Justification::centred);
+        // read-outs
+        const float ry = r.getBottom() + 20.f * k; g.setFont(F(9.5f * k, true, 0.08f));
+        g.setColour(cDim); g.drawText("THRESHOLD", Rectangle<float>(8.f * k, ry, W - 16.f * k, 12.f * k), Justification::centredLeft);
+        g.setColour(cYellow); g.setFont(F(14.f * k, true)); g.drawText(String(thr, 1) + " dB", Rectangle<float>(8.f * k, ry + 12.f * k, W - 16.f * k, 18.f * k), Justification::centredLeft);
+        g.setColour(cDim); g.setFont(F(9.5f * k, true, 0.08f)); g.drawText("KNEE", Rectangle<float>(8.f * k, ry + 36.f * k, W - 16.f * k, 12.f * k), Justification::centredLeft);
+        g.setColour(cText); g.setFont(F(14.f * k, true)); g.drawText(String(ui::getP(a, "knee"), 1) + " dB", Rectangle<float>(8.f * k, ry + 48.f * k, W - 16.f * k, 18.f * k), Justification::centredLeft);
+    }
+    void mouseDown(const MouseEvent& e) override {
+        auto r = plot(); const float k = K(*this); mode = 0;
+        if (std::fabs(e.position.x - (r.getX() + 8.f * k)) < 10.f * k && std::fabs(e.position.y - Y(thrNow() + kneeNow() * 0.5f)) < 10.f * k) mode = 2; else if (r.expanded(8.f * k).contains(e.position)) mode = 1;
+        if (mode) ui::gesture(proc.apvts, mode == 1 ? "threshold" : "knee", true); mouseDrag(e);
+    }
+    void mouseDrag(const MouseEvent& e) override {
+        auto r = plot(); const float db = jlimit(-60.f, 0.f, -60.f + (r.getBottom() - e.position.y) / r.getHeight() * 60.f);
+        if (mode == 1) { if (ui::getP(proc.apvts, "autoThr") < 0.5f) ui::setP(proc.apvts, "threshold", jlimit(-60.f, 0.f, db)); }
+        else if (mode == 2) ui::setP(proc.apvts, "knee", jlimit(0.f, 72.f, 2.f * (db - thrNow())));
+    }
+    void mouseUp(const MouseEvent&) override { if (mode) ui::gesture(proc.apvts, mode == 1 ? "threshold" : "knee", false); mode = 0; }
+    void mouseWheelMove(const MouseEvent&, const MouseWheelDetails& w) override { ui::gesture(proc.apvts, "knee", true); ui::setP(proc.apvts, "knee", jlimit(0.f, 72.f, ui::getP(proc.apvts, "knee") + w.deltaY * 12.f)); ui::gesture(proc.apvts, "knee", false); }
+private:
+    RajvikProcessor& proc; int mode = 0;
 };
 
 // ------------------------------------------------------------------ right-hand level meter: scale, GR bar, input / output bars, peak read-outs

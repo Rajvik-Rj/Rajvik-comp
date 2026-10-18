@@ -74,13 +74,13 @@ private:
 } // namespace
 
 RajvikEditor::RajvikEditor(RajvikProcessor& p)
-    : AudioProcessorEditor(&p), proc(p), display(p), mbDisplay(p, selBand, [this] { onBandSelected(); }), charPanel(p.apvts), stereoSeg(p.apvts, "stereoMode", { "L / R", "M / S" }), eqGraph(p, eqSel, [this] { onEqSelected(); })
+    : AudioProcessorEditor(&p), proc(p), display(p), kneePanel(p), mbDisplay(p, selBand, [this] { onBandSelected(); }), charPanel(p.apvts), stereoSeg(p.apvts, "stereoMode", { "L / R", "M / S" }), eqGraph(p, eqSel, [this] { onEqSelected(); })
 {
     setLookAndFeel(&lnf);
     auto& a = proc.apvts;
     charIcon = std::make_unique<CharIcon>(); scToggle = std::make_unique<LabelButton>("SIDE CHAIN");
     midiItem = std::make_unique<StatusText>("MIDI Learn"); osItem = std::make_unique<StatusText>("Oversampling:"); lookItem = std::make_unique<StatusText>("Lookahead:"); detItem = std::make_unique<StatusText>("Detector:");
-    for (auto* c : std::initializer_list<juce::Component*>{ &display, &mbDisplay, &meter, &guiBtn, &undoBtn, &redoBtn, &prevBtn, &nextBtn, &fullBtn, &abBtn, &copyBtn, &helpBtn, &presetBtn,
+    for (auto* c : std::initializer_list<juce::Component*>{ &display, &kneePanel, &mbDisplay, &meter, &guiBtn, &undoBtn, &redoBtn, &prevBtn, &nextBtn, &fullBtn, &abBtn, &copyBtn, &helpBtn, &presetBtn,
          &soloBtn, &muteBtn, &bypBtn, &bandsBox, &bandGain, &thr, &ratio, &atk, &rel, &gain, &dry, &knee, &range, &look, &hold, &stylePill, charIcon.get(), scToggle.get(),
          midiItem.get(), osItem.get(), lookItem.get(), detItem.get(), &mbMix, &mbBtn, &mixV, &inV, &outV, &gearBtn,
          &listenBtn, &trig[0], &trig[1], &trig[2], &trig[3], &scLevelSl, &scLevelV, &linkKnob, &wetPan, &dryPan, &stereoSeg, &midBtn, &sideBtn, &invertBtn, &scOnBtn, &eqOnBtn, &routeBox, &eqBandsBox,
@@ -234,7 +234,7 @@ void RajvikEditor::setTrigger(int t)
 void RajvikEditor::applyModeLayout()
 {
     mbShown = ui::getP(proc.apvts, "mbOn") > 0.5f;
-    display.setVisible(!mbShown); mbDisplay.setVisible(mbShown);
+    display.setVisible(!mbShown); kneePanel.setVisible(!mbShown); mbDisplay.setVisible(mbShown);
     bindMainKnobs(); applyLayoutVisibility(); resized(); repaint();
 }
 void RajvikEditor::applyLayoutVisibility()
@@ -361,7 +361,7 @@ void RajvikEditor::setScalePercent(int pct) { const int w = juce::jlimit(220, 44
 
 void RajvikEditor::timerCallback()
 {
-    display.pull(); mbDisplay.pull();
+    display.pull(); mbDisplay.pull(); kneePanel.curIn = display.curIn; kneePanel.curOut = display.curOut; if (kneePanel.isVisible()) kneePanel.repaint();
     meter.update(display.curIn, display.curOut, display.curGr);
     meter.mom = proc.mMom; meter.sho = proc.mShort; meter.integ = proc.mInt; meter.tp = proc.mTp; meter.rmsIn = proc.mRmsIn; meter.rmsOut = proc.mRmsOut;
     proc.syncMidiMap();
@@ -456,7 +456,7 @@ void RajvikEditor::resized()
     prevBtn.setBounds(Ri(660, 6, 26, 28)); presetBtn.setBounds(Ri(688, 4, 210, 32)); nextBtn.setBounds(Ri(900, 6, 26, 28));
     helpBtn.setBounds(Ri(950, 4, 50, 32)); guiBtn.setBounds(Ri(1010, 6, 28, 28)); fullBtn.setBounds(Ri(1054, 6, 28, 28));
     // display + meter
-    display.setBounds(Ri(0, 40, 1040, 580)); mbDisplay.setBounds(Ri(0, 40, 1040, 580)); meter.setBounds(Ri(1040, 40, 60, 580));
+    display.setBounds(Ri(150, 40, 890, 580)); kneePanel.setBounds(Ri(0, 40, 150, 580)); mbDisplay.setBounds(Ri(0, 40, 1040, 580)); meter.setBounds(Ri(1040, 40, 60, 580));
     // multiband band strip
     for (int i = 0; i < 4; ++i) bandBtn[i].setBounds(Ri(14.f + (float) i * 70.f, 46, 66, 24));
     soloBtn.setBounds(Ri(300, 46, 36, 24)); muteBtn.setBounds(Ri(340, 46, 36, 24)); bypBtn.setBounds(Ri(380, 46, 46, 24)); bandsBox.setBounds(Ri(436, 46, 96, 24)); bandGain.setBounds(Ri(548, 46, 220, 24));

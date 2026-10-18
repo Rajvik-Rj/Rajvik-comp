@@ -31,7 +31,7 @@ private:
     ui::IconButton guiBtn{ "gear" }, undoBtn{ "undo" }, redoBtn{ "redo" }, prevBtn{ "prev" }, nextBtn{ "next" }, fullBtn{ "fullscreen" };
     ui::TextLinkButton abBtn{ "A / B" }, copyBtn{ "Copy" }, helpBtn{ "Help" }, presetBtn{ "Default Preset" };
     // display
-    pro::ProDisplay display; MultibandDisplay mbDisplay; pro::ProMeter meter;
+    pro::ProDisplay display; pro::KneePanel kneePanel; MultibandDisplay mbDisplay; pro::ProMeter meter;
     juce::TextButton bandBtn[4]; juce::TextButton soloBtn{ "S" }, muteBtn{ "M" }, bypBtn{ "Byp" }; juce::ComboBox bandsBox; juce::Slider bandGain{ juce::Slider::LinearHorizontal, juce::Slider::TextBoxRight };
     // knobs
     pro::ProKnob thr, ratio, atk, rel, gain, dry; pro::CurveSlider knee, range, look, hold;
