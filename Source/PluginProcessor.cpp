@@ -10,7 +10,7 @@ RajvikProcessor::RajvikProcessor()
       apvts(*this, &undo, "STATE", createLayout()), presets(apvts)
 {
     auto r = [&](const juce::String& id) { return apvts.getRawParameterValue(id); };
-    prm.mode = r("mode"); prm.thr = r("threshold"); prm.ratio = r("ratio"); prm.atk = r("attack"); prm.rel = r("release"); prm.mix = r("mix"); prm.dry = r("dry"); prm.wetPan = r("wetPan"); prm.dryPan = r("dryPan"); prm.autoThr = r("autoThr"); prm.charPost = r("charPost"); prm.lookOn = r("lookOn");
+    prm.mode = r("mode"); prm.thr = r("threshold"); prm.ratio = r("ratio"); prm.atk = r("attack"); prm.rel = r("release"); prm.mix = r("mix"); prm.dry = r("dry"); prm.clamp = r("clamp"); prm.wetPan = r("wetPan"); prm.dryPan = r("dryPan"); prm.autoThr = r("autoThr"); prm.charPost = r("charPost"); prm.lookOn = r("lookOn");
     prm.knee = r("knee"); prm.range = r("range"); prm.hold = r("hold"); prm.look = r("lookahead"); prm.link = r("link");
     prm.inG = r("inGain"); prm.outG = r("outGain"); prm.autoGain = r("autoGain"); prm.autoRel = r("autoRelease"); prm.det = r("detector");
     prm.chr = r("character"); prm.drive = r("drive"); prm.os = r("oversampling"); prm.stMode = r("stereoMode");
@@ -26,7 +26,7 @@ RajvikProcessor::RajvikProcessor()
     }
     for (int b = 0; b < 4; ++b) {
         const auto n = juce::String(b + 1);
-        mbP[b] = { r("mbThr" + n), r("mbRatio" + n), r("mbAtk" + n), r("mbRel" + n), r("mbGain" + n), r("mbSolo" + n), r("mbMute" + n), r("mbByp" + n), r("mbMode" + n) };
+        mbP[b] = { r("mbThr" + n), r("mbRatio" + n), r("mbAtk" + n), r("mbRel" + n), r("mbGain" + n), r("mbSolo" + n), r("mbMute" + n), r("mbByp" + n), r("mbMode" + n), r("mbExt" + n) };
         mbGr[(size_t) b] = 0.f; mbLvl[(size_t) b] = -100.f;
     }
     for (auto& c : ccMap) c.store(nullptr);
@@ -94,7 +94,7 @@ void RajvikProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     const float autoLvlDb = 10.f * std::log10((float) std::max(autoPow, 1e-9));
     const float thrNow = *prm.autoThr > 0.5f ? std::round(std::clamp(autoLvlDb + *prm.thr + 18.f, -60.f, 0.f) * 4.f) * 0.25f : (float) *prm.thr;
     effThr.store(thrNow, std::memory_order_relaxed);
-    EngineParams ep; ep.thrDb = thrNow; ep.ratio = *prm.ratio; ep.atkMs = *prm.atk; ep.relMs = *prm.rel; ep.kneeDb = *prm.knee;
+    EngineParams ep; ep.thrDb = thrNow; ep.clamp = *prm.clamp * 0.01f; ep.ratio = *prm.ratio; ep.atkMs = *prm.atk; ep.relMs = *prm.rel; ep.kneeDb = *prm.knee;
     ep.rangeDb = *prm.range; ep.holdMs = *prm.hold; ep.link = *prm.link * 0.01f; ep.mode = (int) *prm.mode;
     ep.detector = (int) *prm.det; ep.autoRelease = *prm.autoRel > 0.5f;
     engine.setParams(ep);
@@ -130,6 +130,7 @@ void RajvikProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
         for (int b = 0; b < 4; ++b) {
             const auto& q = mbP[b];
             bs[b] = { *q.thr, *q.ratio, *q.atk, *q.rel, *q.gain, *q.solo > 0.5f, *q.mute > 0.5f, *q.byp > 0.5f, (int) *q.mode };
+        bs[b].ext = *q.ext > 0.5f;
         }
         mb.setup(nb, xo, ep, bs); 
     }
@@ -216,7 +217,9 @@ void RajvikProcessor::processChunk(juce::AudioBuffer<float>& main, int start, in
             // ---- multiband: split (delayed audio) + split (detector) -> 1..4 compressors -> sum ----
             float xa[2] = { d[0], d[1] }, wm[2] = { 0, 0 }, lm[2] = { 0, 0 };
             if (msOn) { const float m = (xa[0] + xa[1]) * 0.5f, s = (xa[0] - xa[1]) * 0.5f; xa[0] = m; xa[1] = s; }
-            mb.process(xa, det, nCh, mbShared, procCh, wm, lm);
+            float ex[2] = { 0, 0 };   // external side chain, in the same (L/R or M/S) encoding as the audio
+            if (scCh > 0) { ex[0] = sc[0][start + i]; ex[1] = sc[std::min(1, scCh - 1)][start + i]; if (msOn) { const float m = (ex[0] + ex[1]) * 0.5f, s2 = (ex[0] - ex[1]) * 0.5f; ex[0] = m; ex[1] = s2; } }
+            mb.process(xa, det, scCh > 0 ? ex : nullptr, nCh, mbShared, procCh, wm, lm);
             minG = std::min(minG, mb.grMin()); maxG = std::max(maxG, mb.grMax());
             if (listen) { if (msOn) { w[0] = lm[0] + lm[1]; w[1] = lm[0] - lm[1]; } else for (int c = 0; c < nCh; ++c) w[c] = lm[c]; }
             else if (msOn) { w[0] = wm[0] + wm[1]; w[1] = wm[0] - wm[1]; }
@@ -276,10 +279,12 @@ void RajvikProcessor::processChunk(juce::AudioBuffer<float>& main, int start, in
         float yd[2] = { 0, 0 }, yw[2] = { 0, 0 }, ym = 0.f;
         for (int c = 0; c < nCh; ++c) { yd[c] = dp[c][i] * dg; yw[c] = wp[c][i] * mk * og; }
         if (msOn) {   // Mid/Side: wet and dry each have their own Mid <-> Side balance
-            auto pan = [](float* v, float p) { const float m = (v[0] + v[1]) * 0.5f * (p > 0.f ? 1.f - p : 1.f), s = (v[0] - v[1]) * 0.5f * (p < 0.f ? 1.f + p : 1.f); v[0] = m + s; v[1] = m - s; };
+            // slide toward Mid (negative) or Side (positive): that part is boosted by up to +6 dB
+            auto pan = [](float* v, float p) { const float gm = p < 0.f ? dbToLin(-p * 6.f) : 1.f, gs = p > 0.f ? dbToLin(p * 6.f) : 1.f;
+                const float m = (v[0] + v[1]) * 0.5f * gm, s = (v[0] - v[1]) * 0.5f * gs; v[0] = m + s; v[1] = m - s; };
             pan(yd, *prm.dryPan * 0.01f); pan(yw, *prm.wetPan * 0.01f);
         } else if (nCh == 2) {   // Left/Right: -100 % = left only, +100 % = right only
-            auto bal = [](float* v, float p) { v[0] *= (p > 0.f ? 1.f - p : 1.f); v[1] *= (p < 0.f ? 1.f + p : 1.f); };
+            auto bal = [](float* v, float p) { v[0] *= (p < 0.f ? dbToLin(-p * 6.f) : 1.f); v[1] *= (p > 0.f ? dbToLin(p * 6.f) : 1.f); };
             bal(yd, *prm.dryPan * 0.01f); bal(yw, *prm.wetPan * 0.01f);
         }
         const float ma = listen ? 1.f : mixAllSm.getNextValue();   // overall dry/wet, after everything

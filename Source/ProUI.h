@@ -17,7 +17,7 @@ inline float textW(const String& t, const Font& f) { GlyphArrangement ga; ga.add
 // ------------------------------------------------------------------ rotary knob: value ring + dot, optional sidechain level ring, AUTO toggle in the caption
 class ProKnob : public Slider {
 public:
-    String caption, autoWord; float ring = -1.f; bool big = false, bipolar = false; std::function<void()> onTouch; String paramId;
+    String caption, autoWord; float ring = -1.f; bool big = false, bipolar = false, mini = false; std::function<void()> onTouch; String paramId;
     ToggleButton autoBtn;
     ProKnob() : Slider(RotaryHorizontalVerticalDrag, NoTextBox) {
         setRotaryParameters(MathConstants<float>::pi * 1.18f, MathConstants<float>::pi * 2.82f, true);
@@ -49,6 +49,7 @@ public:
     void mouseEnter(const MouseEvent& e) override { Slider::mouseEnter(e); repaint(); }
     void mouseExit(const MouseEvent& e) override { Slider::mouseExit(e); repaint(); }
     void paint(Graphics& g) override {
+        if (mini) { paintMini(g); return; }
         const float k = K(*this), lh = 26.f * k; auto b = getLocalBounds().toFloat(); const float D = jmin(b.getWidth(), b.getHeight() - lh);
         const Point<float> c(b.getCentreX(), D * 0.5f); const float R = D * 0.5f - 3.f * k;
         const auto rp = getRotaryParameters(); const float a0 = rp.startAngleRadians, a1 = rp.endAngleRadians;
@@ -84,31 +85,49 @@ public:
         if (autoWord.isNotEmpty()) { g.setColour(autoBtn.getToggleState() ? cYellow : cFaint.brighter(0.15f)); g.drawText(autoWord, Rectangle<float>(x0, ty, wa + 2.f, lh - 4.f * k), Justification::centredLeft); }
         g.setColour(hot ? Colours::white : cText.withAlpha(0.92f)); g.drawText(caption, Rectangle<float>(x0 + wa + gap, ty, wc + 4.f, lh - 4.f * k), Justification::centredLeft);
     }
+    void paintMini(Graphics& g) {   // small ring knob, label + value to the right
+        const float k = K(*this); auto b = getLocalBounds().toFloat(); const float r = jmin(b.getHeight() * 0.5f - 4.f * k, 20.f * k); const Point<float> c(r + 6.f * k, b.getCentreY());
+        const auto rp = getRotaryParameters(); const float a0 = rp.startAngleRadians, a1 = rp.endAngleRadians, mid = a0 + 0.5f * (a1 - a0);
+        const float pos = (float) valueToProportionOfLength(getValue()), ang = a0 + pos * (a1 - a0);
+        g.setColour(Colour(0xff14141d)); g.fillEllipse(c.x - r, c.y - r, r * 2.f, r * 2.f);
+        Path t; t.addCentredArc(c.x, c.y, r, r, 0.f, a0, a1, true); g.setColour(Colour(0xff2a2a38)); g.strokePath(t, PathStrokeType(3.f * k));
+        { Path v; const float s0 = bipolar ? mid : a0; v.addCentredArc(c.x, c.y, r, r, 0.f, jmin(s0, ang), jmax(s0, ang) + 0.0001f, true); g.setColour(Colour(0xfff5c542)); g.strokePath(v, PathStrokeType(3.4f * k)); }
+        if (ring >= 0.f) { Path v; v.addCentredArc(c.x, c.y, r + 5.f * k, r + 5.f * k, 0.f, a0, a0 + jlimit(0.f, 1.f, ring) * (a1 - a0), true); g.setColour(cGreen.withAlpha(0.85f)); g.strokePath(v, PathStrokeType(1.6f * k)); }
+        const Point<float> p0(c.x + std::sin(ang) * r * 0.25f, c.y - std::cos(ang) * r * 0.25f), p1(c.x + std::sin(ang) * (r - 6.f * k), c.y - std::cos(ang) * (r - 6.f * k));
+        g.setColour(Colours::white); g.drawLine(Line<float>(p0, p1), 2.f * k);
+        const float tx = c.x + r + 12.f * k;
+        g.setColour(Colour(0xff8c8c9c)); g.setFont(F(9.f * k, true, 0.12f)); g.drawText(caption, Rectangle<float>(tx, c.y - 18.f * k, b.getWidth() - tx, 13.f * k), Justification::centredLeft);
+        g.setColour(isMouseOverOrDragging() ? Colour(0xfff5c542) : Colour(0xffe9e9f0)); g.setFont(F(14.5f * k, true)); g.drawText(getTextFromValue(getValue()), Rectangle<float>(tx, c.y - 4.f * k, b.getWidth() - tx, 20.f * k), Justification::centredLeft);
+    }
 private:
     Label entry; double defaultV = 0; std::unique_ptr<SA::SliderAttachment> att; std::unique_ptr<SA::ButtonAttachment> autoAtt;
 };
 
-// ------------------------------------------------------------------ small wavy-line slider (Knee / Range / Lookahead / Hold)
+// ------------------------------------------------------------------ flat slider (Knee / Range / Lookahead / Hold / Dry gain; bipolar Mid-Side balance)
 class CurveSlider : public Slider {
 public:
-    String caption; std::function<void()> onTouch;
+    String caption, endL = "MID", endR = "SIDE"; bool bal = false; Colour col{ 0xfff5c542 }; std::function<void()> onTouch;
     CurveSlider() : Slider(LinearBar, NoTextBox) { setSliderSnapsToMousePosition(false); setMouseDragSensitivity(180); onDragStart = [this] { if (onTouch) onTouch(); }; }
     ~CurveSlider() override { att.reset(); }
     void bind(SA& a, const String& id) { att.reset(); att = std::make_unique<SA::SliderAttachment>(a, id, *this); if (auto* p = a.getParameter(id)) defaultV = p->convertFrom0to1(p->getDefaultValue()); }
     void mouseDoubleClick(const MouseEvent&) override { setValue(defaultV, sendNotificationSync); }
     void mouseEnter(const MouseEvent& e) override { Slider::mouseEnter(e); repaint(); }
     void mouseExit(const MouseEvent& e) override { Slider::mouseExit(e); repaint(); }
+    String getTextFromValue(double v) override {
+        if (!bal) return Slider::getTextFromValue(v);
+        if (std::fabs(v) < 0.5) return "0.0 dB";
+        const auto& e = v < 0 ? endL : endR; return e.substring(0, 1) + e.substring(1).toLowerCase() + " +" + String(std::fabs(v) * 0.06, 1) + " dB";
+    }
     void paint(Graphics& g) override {
-        const float k = K(*this), lh = 17.f * k; auto b = getLocalBounds().toFloat(); const Rectangle<float> tr(b.getX() + 6.f * k, 0.f, b.getWidth() - 12.f * k, b.getHeight() - lh);
-        const float cy = tr.getCentreY(), amp = 3.4f * k; const float pos = (float) valueToProportionOfLength(getValue()), xv = tr.getX() + pos * tr.getWidth();
-        auto yAt = [&](float x) { return cy + amp * std::sin((x - tr.getX()) / tr.getWidth() * MathConstants<float>::twoPi * 1.5f); };
-        Path t, v; for (float x = tr.getX(); x <= tr.getRight() + 0.1f; x += 2.f * k) { if (x == tr.getX()) t.startNewSubPath(x, yAt(x)); else t.lineTo(x, yAt(x)); }
-        for (float x = tr.getX(); x <= xv; x += 1.5f * k) { if (x == tr.getX()) v.startNewSubPath(x, yAt(x)); else v.lineTo(x, yAt(x)); }
-        g.setColour(cTrack); g.strokePath(t, PathStrokeType(2.2f * k, PathStrokeType::curved, PathStrokeType::rounded));
-        if (pos > 0.004f) { g.setColour(cYellow.withAlpha(0.2f)); g.strokePath(v, PathStrokeType(6.f * k, PathStrokeType::curved, PathStrokeType::rounded)); g.setColour(cYellow); g.strokePath(v, PathStrokeType(3.2f * k, PathStrokeType::curved, PathStrokeType::rounded)); }
-        g.setColour(Colour(0xff0d0d10)); g.fillEllipse(xv - 4.4f * k, yAt(xv) - 4.4f * k, 8.8f * k, 8.8f * k); g.setColour(cYellow); g.fillEllipse(xv - 3.2f * k, yAt(xv) - 3.2f * k, 6.4f * k, 6.4f * k);
-        const bool drag = isMouseButtonDown(); g.setFont(F(10.f * k, true, 0.08f)); g.setColour(drag ? cYellow : (isMouseOver() ? Colours::white : cText.withAlpha(0.9f)));
-        g.drawText(drag ? getTextFromValue(getValue()) : caption + "  " + getTextFromValue(getValue()), Rectangle<float>(0.f, b.getBottom() - lh, b.getWidth(), lh), Justification::centred);
+        const float k = K(*this); auto b = getLocalBounds().toFloat(); const float ty = b.getHeight() * 0.62f, h = 3.4f * k;
+        g.setColour(Colour(0xff8c8c9c)); g.setFont(F(9.f * k, true, 0.12f)); g.drawText(caption, Rectangle<float>(0.f, 0.f, b.getWidth() * 0.62f, 14.f * k), Justification::centredLeft);
+        g.setColour(isMouseOverOrDragging() ? col : Colour(0xffe9e9f0)); g.setFont(F(12.f * k, true)); g.drawText(getTextFromValue(getValue()), Rectangle<float>(b.getWidth() * 0.3f, 0.f, b.getWidth() * 0.7f, 14.f * k), Justification::centredRight);
+        const float x0 = 6.f * k, w = b.getWidth() - 12.f * k, pos = (float) valueToProportionOfLength(getValue()), px = x0 + pos * w;
+        g.setColour(Colour(0xff2a2a38)); g.fillRoundedRectangle(x0, ty - h * 0.5f, w, h, h * 0.5f);
+        if (bal) { const float cx = x0 + w * 0.5f; g.setColour(col); g.fillRoundedRectangle(jmin(cx, px), ty - h * 0.5f, std::fabs(px - cx), h, h * 0.5f); g.setColour(Colour(0xff55555d)); g.fillRect(cx - 0.7f * k, ty - 6.f * k, 1.4f * k, 12.f * k);
+            g.setColour(Colour(0xff5a5a6a)); g.setFont(F(8.f * k, true, 0.1f)); g.drawText(endL, Rectangle<float>(0.f, ty + 8.f * k, 60.f * k, 11.f * k), Justification::centredLeft); g.drawText(endR, Rectangle<float>(b.getWidth() - 60.f * k, ty + 8.f * k, 60.f * k, 11.f * k), Justification::centredRight); }
+        else { g.setColour(col); g.fillRoundedRectangle(x0, ty - h * 0.5f, jmax(h, pos * w), h, h * 0.5f); }
+        g.setColour(Colour(0xff07070c)); g.fillEllipse(px - 7.2f * k, ty - 7.2f * k, 14.4f * k, 14.4f * k); g.setColour(col); g.fillEllipse(px - 5.2f * k, ty - 5.2f * k, 10.4f * k, 10.4f * k);
     }
 private:
     double defaultV = 0; std::unique_ptr<SA::SliderAttachment> att;
@@ -146,6 +165,20 @@ public:
         g.setColour(cYellow); g.fillRoundedRectangle(cx - 3.f * k, jmin(y, ym), 6.f * k, std::fabs(y - ym) + 1.f, 2.f * k);
         g.setColour(Colour(0xff0d0d10)); g.fillEllipse(cx - 7.f * k, y - 7.f * k, 14.f * k, 14.f * k);
         g.setGradientFill(ColourGradient(Colour(0xffe8e8ee), cx, y - 6.f * k, Colour(0xff9a9aa4), cx, y + 6.f * k, false)); g.fillEllipse(cx - 5.5f * k, y - 5.5f * k, 11.f * k, 11.f * k);
+    }
+};
+
+// ------------------------------------------------------------------ flat rounded button (header, status bar, toggles); gold when on
+class BoxButton : public Button {
+public:
+    String text; bool caret = false;
+    explicit BoxButton(const String& t = {}) : Button(t), text(t) {}
+    void paintButton(Graphics& g, bool hl, bool down) override {
+        const float k = K(*this); auto r = getLocalBounds().toFloat(); const bool on = getToggleState();
+        g.setColour(on ? Colour(0xfff5c542) : Colour(down ? 0xff2a2a38 : (hl ? 0xff262634 : 0xff1d1d29))); g.fillRoundedRectangle(r, 6.f * k);
+        const auto c = on ? Colour(0xff17140a) : Colour(0xffd2d3de); g.setColour(c); g.setFont(F(std::min(11.5f * k, r.getHeight() * 0.5f), on)); 
+        g.drawText(text.isEmpty() ? getButtonText() : text, caret ? r.withTrimmedRight(12.f * k) : r, Justification::centred);
+        if (caret) { Path p; const float cx = r.getRight() - 12.f * k, cy = r.getCentreY(); p.addTriangle(cx - 3.4f * k, cy - 1.7f * k, cx + 3.4f * k, cy - 1.7f * k, cx, cy + 2.6f * k); g.fillPath(p); }
     }
 };
 
@@ -227,12 +260,11 @@ private:
     SA& apvts; std::unique_ptr<SA::SliderAttachment> driveA;
 };
 
-// ------------------------------------------------------------------ level display: input level history, red gain-reduction trace, transfer curve with live point
+// ------------------------------------------------------------------ main view: dB-scaled waveform with threshold / knee drawn on it, plus the knee-curve panel on the left
 class ProDisplay : public Component {
 public:
     explicit ProDisplay(RajvikProcessor& p) : proc(p) { lastRead = proc.meters.w.load(); }
-    float curIn = -100, curOut = -100, curGr = 0;
-    static constexpr float kTop = 0.f, kBot = -36.f;   // level axis shared with the meter scale
+    float curIn = -100, curOut = -100, curGr = 0; bool showCurve = true;
     void pull() {
         const unsigned w = proc.meters.w.load(std::memory_order_acquire); unsigned from = lastRead; if (w - from > MeterRing::N) from = w - MeterRing::N;
         for (unsigned i = from; i != w; ++i) { const auto k = i % MeterRing::N; hist.push_back({ rdp::linToDb(proc.meters.in[k].load()), rdp::linToDb(proc.meters.out[k].load()), proc.meters.gr[k].load() }); }
@@ -240,92 +272,69 @@ public:
         if (!hist.empty()) { curIn = hist.back().in; curOut = hist.back().out; curGr = hist.back().gr; }
         if (isVisible()) repaint();
     }
-    float yOf(float db) const { const float H = (float) getHeight(); return H * 0.045f + (jlimit(kBot, kTop, db) - kTop) / (kBot - kTop) * H * 0.91f; }
+    static float rr(float db) { return jlimit(0.f, 1.f, (db + 48.f) / 48.f); }
     void paint(Graphics& g) override {
         const float k = K(*this), W = (float) getWidth(), H = (float) getHeight();
-        g.setGradientFill(ColourGradient(cTop, 0.f, 0.f, cBot, 0.f, H, false)); g.fillAll();
-        for (int db = 0; db >= -36; db -= 6) { g.setColour(Colour(0x14ffffff)); g.fillRect(0.f, yOf((float) db), W, 1.f); }
-        const int n = (int) hist.size(); const float dx = W / 480.f, x0 = W - (float) n * dx;
-        if (n > 1) {   // input level (grey, jagged)
-            Path line, fill; fill.startNewSubPath(x0, H);
-            for (int i = 0; i < n; ++i) { const float x = x0 + (float) i * dx, y = yOf(hist[(size_t) i].in + 3.f); if (i == 0) line.startNewSubPath(x, y); else line.lineTo(x, y); fill.lineTo(x, y); }
-            fill.lineTo(W, H); fill.closeSubPath();
-            g.setGradientFill(ColourGradient(Colour(0x40b8b8c4), 0.f, yOf(-6.f), Colour(0x04b8b8c4), 0.f, H, false)); g.fillPath(fill);
-            g.setColour(Colour(0xffa8a8b3).withAlpha(0.85f)); g.strokePath(line, PathStrokeType(1.1f * k));
-            // red gain reduction trace hanging from the top
-            Path gr, grFill; const float gy0 = H * 0.03f; grFill.startNewSubPath(x0, gy0);
-            for (int i = 0; i < n; ++i) { const float x = x0 + (float) i * dx, y = gy0 + jmin(std::fabs(hist[(size_t) i].gr), 24.f) / 24.f * H * 0.30f; if (i == 0) gr.startNewSubPath(x, y); else gr.lineTo(x, y); grFill.lineTo(x, y); }
-            grFill.lineTo(W, gy0); grFill.closeSubPath(); g.setColour(cRed.withAlpha(0.10f)); g.fillPath(grFill);
-            g.setColour(cRed.withAlpha(0.35f)); g.strokePath(gr, PathStrokeType(4.f * k)); g.setColour(cRed); g.strokePath(gr, PathStrokeType(1.4f * k));
+        g.fillAll(Colour(0xff06060b));
+        auto& a = proc.apvts; const auto& m = rdp::kModes[(int) ui::getP(a, "mode")];
+        const float thr = ui::getP(a, "autoThr") > 0.5f ? proc.effThr.load() : ui::getP(a, "threshold"), ratio = ui::getP(a, "ratio"), rng = ui::getP(a, "range"), knee = jlimit(0.f, 72.f, ui::getP(a, "knee") + m.kneeAdd);
+        const float cw = showCurve ? 214.f * k : 0.f, x0 = cw, ww = W - cw, hh = (H - 70.f * k) * 0.5f, yc = 60.f * k + hh, rt = rr(thr) * hh;
+        const Colour gold(0xfff5c542);
+        // grid
+        g.setColour(Colour(0xff12121a)); for (int i = 0; i <= 12; ++i) g.fillRect(x0 + ww * (float) i / 12.f, 0.f, 1.f, H);
+        g.setColour(Colour(0xff14141d)); for (float db : { 0.f, -12.f, -24.f, -36.f }) for (int s = -1; s <= 1; s += 2) g.fillRect(x0, yc + (float) s * rr(db) * hh, ww, 1.f);
+        g.setColour(Colour(0xff1d1d29)); g.fillRect(x0, yc, ww, 1.f);
+        // knee zone around the threshold (mirrored above / below the centre line)
+        for (int s = -1; s <= 1; s += 2) { const float yA = yc + (float) s * rr(thr + knee * 0.5f) * hh, yB = yc + (float) s * rr(thr - knee * 0.5f) * hh; g.setColour(gold.withAlpha(0.10f)); g.fillRect(x0, jmin(yA, yB), ww, std::fabs(yA - yB)); }
+        // waveform: grey = below threshold (untouched), gold = part above the threshold, white line = output
+        const int n = (int) hist.size(); const float dx = ww / 480.f, xs = W - (float) n * dx; Path top, bot, grp, grf; const float gy0 = 8.f * k;
+        grf.startNewSubPath(xs, 6.f * k);
+        for (int i = 0; i < n; ++i) {
+            const float x = xs + (float) i * dx, ri = rr(hist[(size_t) i].in) * hh, ro = rr(hist[(size_t) i].out) * hh, bw = dx + 0.7f, rl = jmin(ri, rt);
+            g.setColour(Colour(0xff4a4a5e)); g.fillRect(x, yc - rl, bw, 2.f * rl);
+            if (ri > rt) { g.setColour(gold); g.fillRect(x, yc - ri, bw, ri - rt); g.fillRect(x, yc + rt, bw, ri - rt); }
+            if (i == 0) { top.startNewSubPath(x, yc - ro); bot.startNewSubPath(x, yc + ro); } else { top.lineTo(x, yc - ro); bot.lineTo(x, yc + ro); }
+            const float gy = gy0 + jmin(16.f, std::fabs(hist[(size_t) i].gr)) * 2.4f * k; if (i == 0) grp.startNewSubPath(x, gy); else grp.lineTo(x, gy); grf.lineTo(x, gy);
         }
-        { auto& a = proc.apvts; const float thr = ui::getP(a, "autoThr") > 0.5f ? proc.effThr.load() : ui::getP(a, "threshold");
-          const float dash[] = { 5.f * k, 5.f * k }; g.setColour(Colour(0x66ffffff)); g.drawDashedLine(Line<float>(0.f, yOf(thr), W, yOf(thr)), dash, 2, 1.f * k); }
-        g.setColour(Colour(0x55000000)); g.fillRect(0.f, H - 1.f, W, 1.f);
+        g.setColour(Colours::white.withAlpha(0.95f)); g.strokePath(top, PathStrokeType(1.5f * k)); g.strokePath(bot, PathStrokeType(1.5f * k));
+        // gain reduction strip
+        g.setColour(Colour(0xff0b0b12).withAlpha(0.85f)); g.fillRect(x0, 4.f * k, ww, 44.f * k); g.setColour(Colour(0xff1d1d29)); g.fillRect(x0, 48.f * k, ww, 1.f);
+        if (n > 1) { grf.lineTo(W, 6.f * k); grf.closeSubPath(); g.setColour(gold.withAlpha(0.16f)); g.fillPath(grf); g.setColour(gold); g.strokePath(grp, PathStrokeType(1.6f * k)); }
+        g.setColour(Colour(0xff5a5a6a)); g.setFont(F(8.5f * k, true, 0.12f)); g.drawText("GAIN REDUCTION", Rectangle<float>(x0 + 8.f * k, 6.f * k, 120.f * k, 12.f * k), Justification::centredLeft);
+        // threshold lines + labels
+        { const float d[] = { 7.f * k, 5.f * k }; g.setColour(gold.withAlpha(0.9f)); for (int s = -1; s <= 1; s += 2) g.drawDashedLine(Line<float>(x0, yc + (float) s * rt, W, yc + (float) s * rt), d, 2, 1.4f * k); }
+        { auto chip = Rectangle<float>(W - 186.f * k, yc - rt - 26.f * k, 178.f * k, 20.f * k); g.setColour(Colour(0xff0f0f17)); g.fillRoundedRectangle(chip, 5.f * k); g.setColour(gold); g.drawRoundedRectangle(chip, 5.f * k, 1.f);
+          g.setFont(F(10.f * k, true, 0.06f)); g.drawText("THRESHOLD  " + String(thr, 1) + " dB", chip, Justification::centred); }
+        g.setColour(Colour(0xff8c8c9c)); g.setFont(F(9.f * k)); g.drawText("above the line the compressor reacts  (" + String(ratio, 1) + " : 1)", Rectangle<float>(W - 330.f * k, yc - rr(-6.f) * hh - 6.f * k, 322.f * k, 14.f * k), Justification::centredRight);
+        if (knee > 0.9f) { g.setColour(gold); g.setFont(F(8.5f * k, true, 0.1f)); g.drawText("KNEE ZONE  " + String(knee, 1) + " dB", Rectangle<float>(x0 + 54.f * k, yc - rr(thr - knee * 0.5f) * hh + 3.f * k, 150.f * k, 12.f * k), Justification::centredLeft); }
+        for (float db : { 0.f, -12.f, -24.f, -36.f }) { const float y = yc - rr(db) * hh; g.setColour(Colour(0xd906060b)); g.fillRoundedRectangle(x0 + 8.f * k, y - 8.f * k, 28.f * k, 16.f * k, 4.f * k); g.setColour(Colour(0xff8c8c9c)); g.setFont(F(9.5f * k, true)); g.drawText(String((int) db), Rectangle<float>(x0 + 8.f * k, y - 8.f * k, 28.f * k, 16.f * k), Justification::centred); }
+        { float lx = x0 + 44.f * k; const float ly = H - 14.f * k; const struct { Colour c; const char* t; } lg[] = { { Colour(0xff4a4a5e), "below threshold (untouched)" }, { gold, "removed by compressor" }, { Colours::white, "output" } };
+          g.setFont(F(9.f * k)); for (auto& e : lg) { g.setColour(e.c); g.fillRoundedRectangle(lx, ly - 8.f * k, 10.f * k, 10.f * k, 2.f * k); g.setColour(Colour(0xff8c8c9c)); g.drawText(e.t, Rectangle<float>(lx + 15.f * k, ly - 9.f * k, 180.f * k, 12.f * k), Justification::centredLeft); lx += 15.f * k + textW(e.t, F(9.f * k)) + 26.f * k; } }
+        if (!showCurve) return;
+        // ---- knee / threshold panel (left) ----
+        g.setColour(Colour(0xff1d1d29)); g.fillRect(cw - 1.f, 0.f, 1.f, H);
+        const float cx0 = 10.f * k, cy0 = 14.f * k, cs = 194.f * k; Rectangle<float> pr(cx0, cy0, cs, cs);
+        g.setColour(Colour(0xff0c0c13)); g.fillRoundedRectangle(pr, 10.f * k); g.setColour(Colour(0xff2a2a38)); g.drawRoundedRectangle(pr, 10.f * k, 1.f);
+        auto XY = [&](float i, float o) { return Point<float>(cx0 + 14.f * k + (i + 60.f) / 60.f * (cs - 28.f * k), cy0 + cs - 14.f * k - (o + 60.f) / 60.f * (cs - 28.f * k)); };
+        g.setColour(Colour(0xff1c1c28)); for (float v : { -48.f, -36.f, -24.f, -12.f, 0.f }) { const auto p = XY(v, v); g.fillRect(p.x, cy0 + 14.f * k, 1.f, cs - 28.f * k); g.fillRect(cx0 + 14.f * k, p.y, cs - 28.f * k, 1.f); }
+        { const auto p0 = XY(-60.f, -60.f), p1 = XY(0.f, 0.f); const float d[] = { 4.f * k, 4.f * k }; g.setColour(Colour(0xff55556a)); g.drawDashedLine(Line<float>(p0, p1), d, 2, 1.f); }
+        Path cv, sh; for (int i = -60; i <= 0; ++i) { const float o = (float) i + rdp::staticGainDb(m.kind, (float) i, thr, ratio, knee, rng); const auto p = XY((float) i, o); if (i == -60) { cv.startNewSubPath(p); sh.startNewSubPath(p); } else { cv.lineTo(p); sh.lineTo(p); } }
+        sh.lineTo(XY(0.f, 0.f)); sh.closeSubPath(); g.setColour(gold.withAlpha(0.12f)); g.fillPath(sh);
+        { const auto ka = XY(thr - knee * 0.5f, 0.f), kb = XY(thr + knee * 0.5f, 0.f); g.setColour(gold.withAlpha(0.10f)); g.fillRect(ka.x, cy0 + 14.f * k, jmax(2.f, kb.x - ka.x), cs - 28.f * k); }
+        g.setColour(gold.withAlpha(0.14f)); g.strokePath(cv, PathStrokeType(6.f * k)); g.setColour(gold); g.strokePath(cv, PathStrokeType(2.4f * k));
+        { const float li = jlimit(-60.f, 0.f, curIn); const auto p = XY(li, li + rdp::staticGainDb(m.kind, li, thr, ratio, knee, rng)); if (curIn > -59.f) { g.setColour(gold.withAlpha(0.25f)); g.fillEllipse(p.x - 11.f * k, p.y - 11.f * k, 22.f * k, 22.f * k); g.setColour(Colours::white); g.fillEllipse(p.x - 5.f * k, p.y - 5.f * k, 10.f * k, 10.f * k); } }
+        g.setColour(Colour(0xff8c8c9c)); g.setFont(F(8.5f * k, true, 0.12f)); g.drawText("KNEE / CURVE", Rectangle<float>(cx0 + 14.f * k, cy0 + 4.f * k, 120.f * k, 12.f * k), Justification::centredLeft);
+        g.setColour(Colour(0xff5a5a6a)); g.drawText("IN", Rectangle<float>(cx0, cy0 + cs - 14.f * k, cs, 12.f * k), Justification::centred); g.drawText("OUT", Rectangle<float>(cx0 + 2.f * k, cy0 + cs * 0.5f - 6.f * k, 26.f * k, 12.f * k), Justification::centredLeft);
+        const struct { const char* l; String v; } rows[] = { { "THRESHOLD", String(thr, 1) + " dB" }, { "RATIO", String(ratio, 1) + " : 1" }, { "KNEE", String(knee, 1) + " dB" }, { "RANGE", String(rng, 0) + " dB" }, { "GAIN REDUCTION", String(curGr, 1) + " dB" } };
+        float ry = 226.f * k; for (auto& r : rows) { g.setColour(Colour(0xff8c8c9c)); g.setFont(F(9.f * k, true, 0.1f)); g.drawText(r.l, Rectangle<float>(16.f * k, ry, 110.f * k, 20.f * k), Justification::centredLeft);
+            g.setColour(r.l[0] == 'G' ? gold : Colour(0xffe9e9f0)); g.setFont(F(12.5f * k, true)); g.drawText(r.v, Rectangle<float>(100.f * k, ry, 98.f * k, 20.f * k), Justification::centredRight); ry += 29.f * k; }
     }
 private:
     struct Frame { float in, out, gr; };
     RajvikProcessor& proc; std::vector<Frame> hist; unsigned lastRead = 0;
 };
 
-
-// ------------------------------------------------------------------ left panel: threshold / knee transfer-curve view (drag the line = threshold, drag the knee handle = knee)
-class KneePanel : public Component {
-public:
-    explicit KneePanel(RajvikProcessor& p) : proc(p) {}
-    float curIn = -100.f, curOut = -100.f;
-    Rectangle<float> plot() const { const float k = K(*this); return Rectangle<float>(30.f * k, 52.f * k, (float) getWidth() - 44.f * k, (float) getWidth() - 44.f * k); }
-    float thrNow() const { auto& a = proc.apvts; return ui::getP(a, "autoThr") > 0.5f ? proc.effThr.load() : ui::getP(a, "threshold"); }
-    float kneeNow() const { auto& a = proc.apvts; return jlimit(0.f, 72.f, ui::getP(a, "knee") + rdp::kModes[(int) ui::getP(a, "mode")].kneeAdd); }
-    float X(float db) const { auto r = plot(); return r.getX() + (jlimit(-60.f, 0.f, db) + 60.f) / 60.f * r.getWidth(); }
-    float Y(float db) const { auto r = plot(); return r.getBottom() - (jlimit(-60.f, 0.f, db) + 60.f) / 60.f * r.getHeight(); }
-    void paint(Graphics& g) override {
-        const float k = K(*this), W = (float) getWidth(), H = (float) getHeight(); auto r = plot();
-        g.setGradientFill(ColourGradient(Colour(0xff25252a), 0.f, 0.f, Colour(0xff17171a), 0.f, H, false)); g.fillAll();
-        g.setColour(cLine); g.fillRect(W - 1.f, 0.f, 1.f, H);
-        g.setColour(cDim); g.setFont(F(10.f * k, true, 0.1f)); g.drawText("THRESHOLD / KNEE", Rectangle<float>(0.f, 10.f * k, W, 14.f * k), Justification::centred);
-        g.setColour(Colour(0xff0d0d10)); g.fillRoundedRectangle(r, 3.f * k);
-        g.setFont(F(8.5f * k)); 
-        for (int db = -60; db <= 0; db += 12) { g.setColour(Colour(0x18ffffff)); g.fillRect(r.getX(), Y((float) db), r.getWidth(), 1.f); g.fillRect(X((float) db), r.getY(), 1.f, r.getHeight());
-            g.setColour(cDim); g.drawText(String(db), Rectangle<float>(0.f, Y((float) db) - 6.f * k, 27.f * k, 12.f * k), Justification::centredRight); }
-        auto& a = proc.apvts; const auto& m = rdp::kModes[(int) ui::getP(a, "mode")];
-        const float thr = thrNow(), kn = kneeNow(), ratio = ui::getP(a, "ratio"), rng = ui::getP(a, "range");
-        // knee zone (around the threshold, on both axes)
-        g.setColour(cYellow.withAlpha(0.10f)); g.fillRect(Rectangle<float>(r.getX(), Y(thr + kn * 0.5f), r.getWidth(), jmax(2.f, Y(thr - kn * 0.5f) - Y(thr + kn * 0.5f))).getIntersection(r));
-        g.setColour(Colour(0x30ffffff)); g.drawLine(r.getX(), r.getBottom(), r.getRight(), r.getY(), 1.f * k);   // 1:1 reference
-        const float dash[] = { 4.f * k, 4.f * k }; g.setColour(cYellow.withAlpha(0.8f)); g.drawDashedLine(Line<float>(r.getX(), Y(thr), r.getRight(), Y(thr)), dash, 2, 1.f * k);
-        g.drawDashedLine(Line<float>(X(thr), r.getY(), X(thr), r.getBottom()), dash, 2, 1.f * k);
-        Path tc; for (int i = 0; i <= 240; ++i) { const float db = -60.f + (float) i * 0.25f, o = db + rdp::staticGainDb(m.kind, db, thr, ratio, kn, rng); const float x = X(db), y = Y(o); if (i == 0) tc.startNewSubPath(x, y); else tc.lineTo(x, y); }
-        g.saveState(); g.reduceClipRegion(r.toNearestInt()); g.setColour(cCurve.withAlpha(0.2f)); g.strokePath(tc, PathStrokeType(5.f * k)); g.setColour(cCurve); g.strokePath(tc, PathStrokeType(1.8f * k));
-        if (curIn > -59.f) { const float px = X(curIn), py = Y(curOut); g.setColour(Colours::white.withAlpha(0.25f)); g.fillEllipse(px - 6.f * k, py - 6.f * k, 12.f * k, 12.f * k); g.setColour(Colours::white); g.fillEllipse(px - 2.5f * k, py - 2.5f * k, 5.f * k, 5.f * k); }
-        g.restoreState();
-        // handles
-        g.setColour(cYellow); g.fillEllipse(r.getRight() - 6.f * k, Y(thr) - 4.f * k, 8.f * k, 8.f * k);
-        g.setColour(Colours::white); g.fillRoundedRectangle(Rectangle<float>(7.f * k, 7.f * k).withCentre({ r.getX() + 8.f * k, Y(thr + kn * 0.5f) }), 1.5f * k);
-        g.setColour(cDim); g.setFont(F(8.5f * k)); g.drawText("IN", Rectangle<float>(r.getX(), r.getBottom() + 2.f * k, r.getWidth(), 11.f * k), Justification::centred);
-        // read-outs
-        const float ry = r.getBottom() + 20.f * k; g.setFont(F(9.5f * k, true, 0.08f));
-        g.setColour(cDim); g.drawText("THRESHOLD", Rectangle<float>(8.f * k, ry, W - 16.f * k, 12.f * k), Justification::centredLeft);
-        g.setColour(cYellow); g.setFont(F(14.f * k, true)); g.drawText(String(thr, 1) + " dB", Rectangle<float>(8.f * k, ry + 12.f * k, W - 16.f * k, 18.f * k), Justification::centredLeft);
-        g.setColour(cDim); g.setFont(F(9.5f * k, true, 0.08f)); g.drawText("KNEE", Rectangle<float>(8.f * k, ry + 36.f * k, W - 16.f * k, 12.f * k), Justification::centredLeft);
-        g.setColour(cText); g.setFont(F(14.f * k, true)); g.drawText(String(ui::getP(a, "knee"), 1) + " dB", Rectangle<float>(8.f * k, ry + 48.f * k, W - 16.f * k, 18.f * k), Justification::centredLeft);
-    }
-    void mouseDown(const MouseEvent& e) override {
-        auto r = plot(); const float k = K(*this); mode = 0;
-        if (std::fabs(e.position.x - (r.getX() + 8.f * k)) < 10.f * k && std::fabs(e.position.y - Y(thrNow() + kneeNow() * 0.5f)) < 10.f * k) mode = 2; else if (r.expanded(8.f * k).contains(e.position)) mode = 1;
-        if (mode) ui::gesture(proc.apvts, mode == 1 ? "threshold" : "knee", true); mouseDrag(e);
-    }
-    void mouseDrag(const MouseEvent& e) override {
-        auto r = plot(); const float db = jlimit(-60.f, 0.f, -60.f + (r.getBottom() - e.position.y) / r.getHeight() * 60.f);
-        if (mode == 1) { if (ui::getP(proc.apvts, "autoThr") < 0.5f) ui::setP(proc.apvts, "threshold", jlimit(-60.f, 0.f, db)); }
-        else if (mode == 2) ui::setP(proc.apvts, "knee", jlimit(0.f, 72.f, 2.f * (db - thrNow())));
-    }
-    void mouseUp(const MouseEvent&) override { if (mode) ui::gesture(proc.apvts, mode == 1 ? "threshold" : "knee", false); mode = 0; }
-    void mouseWheelMove(const MouseEvent&, const MouseWheelDetails& w) override { ui::gesture(proc.apvts, "knee", true); ui::setP(proc.apvts, "knee", jlimit(0.f, 72.f, ui::getP(proc.apvts, "knee") + w.deltaY * 12.f)); ui::gesture(proc.apvts, "knee", false); }
-private:
-    RajvikProcessor& proc; int mode = 0;
-};
-
-// ------------------------------------------------------------------ right-hand level meter: scale, GR bar, input / output bars, peak read-outs
+// ------------------------------------------------------------------ right-hand meter: GR chip + scale, input / output level bars
 class ProMeter : public Component {
 public:
     float in = -100, out = -100, gr = 0, inHold = -100, outHold = -100, grMax = 0;
@@ -335,31 +344,33 @@ public:
         inHold = std::max(i, inHold - 0.1f); outHold = std::max(o, outHold - 0.1f); if (g < grMax) grMax = g; repaint();
     }
     void mouseDown(const MouseEvent& e) override {
-        if (e.position.y < 22.f * K(*this) && e.position.x > (float) getWidth() * 0.5f) { outMode = (outMode + 1) % 6; repaint(); return; }
+        if (e.position.y > (float) getHeight() - 26.f * K(*this)) { outMode = (outMode + 1) % 6; repaint(); return; }
         inHold = outHold = -100; grMax = 0; if (onReset) onReset();
     }
     String outText() const {
         auto f = [](float v) { return v <= -99.f ? String("--") : String(v, 1); };
-        switch (outMode) { case 1: return f(tp); case 2: return f(rmsOut); case 3: return f(mom); case 4: return f(sho); case 5: return f(integ); default: return f(outHold); }
+        switch (outMode) { case 1: return "TP " + f(tp); case 2: return "RMS " + f(rmsOut); case 3: return "M " + f(mom); case 4: return "S " + f(sho); case 5: return "I " + f(integ); default: return f(outHold); }
     }
     void paint(Graphics& g) override {
-        const float k = K(*this), W = (float) getWidth(), H = (float) getHeight();
-        g.setGradientFill(ColourGradient(Colour(0xff25252a), 0.f, 0.f, Colour(0xff101013), 0.f, H, false)); g.fillAll(); g.setColour(Colour(0xff0a0a0c)); g.fillRect(0.f, 0.f, 1.f, H);
-        const float top = 28.f * k, bot = H - 8.f * k; auto Y = [&](float db) { return top + (jlimit(-36.f, 0.f, db)) / -36.f * (bot - top); };
-        g.setFont(F(9.5f * k)); g.setColour(cDim);
-        for (int db = 0; db >= -33; db -= 3) g.drawText(String(db), Rectangle<float>(0.f, Y((float) db) - 6.f * k, 25.f * k, 12.f * k), Justification::centredRight);
-        auto bar = [&](float x, float w, float level, float hold) {
-            auto b = Rectangle<float>(x, top, w, bot - top); g.setColour(Colour(0xff0b0b0d)); g.fillRoundedRectangle(b, 1.5f * k);
-            const float t = Y(level); if (t < b.getBottom()) { ColourGradient cg(Colour(0xffd6b72c), 0.f, Y(0.f), Colour(0xff4fa83a), 0.f, Y(-30.f), false); cg.addColour(0.0, cRed); cg.addColour(0.16, Colour(0xffd6b72c)); g.setGradientFill(cg); g.fillRoundedRectangle(b.withTop(t), 1.5f * k); }
-            g.setColour(Colours::white.withAlpha(0.9f)); g.fillRect(b.getX(), Y(hold), b.getWidth(), 1.3f * k);
-        };
-        { auto b = Rectangle<float>(29.f * k, top, 6.f * k, bot - top); g.setColour(Colour(0xff0b0b0d)); g.fillRoundedRectangle(b, 1.5f * k);   // GR (hangs from the top)
-          const float h = jmin(std::fabs(gr), 36.f) / 36.f * b.getHeight(); g.setColour(cRed); g.fillRoundedRectangle(b.withHeight(h), 1.5f * k); }
-        bar(38.f * k, 8.f * k, in, inHold); bar(48.f * k, 8.f * k, out, outHold);
-        g.setFont(F(10.f * k, true)); auto rd = [&](Rectangle<float> r, const String& t, bool hot) { g.setColour(hot ? cRed : cGreen); g.drawText(t, r, Justification::centred); };
-        rd(Rectangle<float>(0.f, 6.f * k, 30.f * k, 14.f * k), inHold <= -99.f ? "--" : String(inHold, 1), inHold > 0.f);
-        rd(Rectangle<float>(30.f * k, 6.f * k, 30.f * k, 14.f * k), outText(), outMode == 0 && outHold > 0.f);
-        if (outMode > 0) { static const char* t[] = { "", "TP", "RMS", "M", "S", "I" }; g.setColour(cYellow); g.setFont(F(8.f * k, true)); g.drawText(t[outMode], Rectangle<float>(W - 24.f * k, 18.f * k, 22.f * k, 9.f * k), Justification::centred); }
+        const float k = K(*this), W = (float) getWidth(), H = (float) getHeight(); const Colour gold(0xfff5c542);
+        g.fillAll(Colour(0xff08080d));
+        auto chip = Rectangle<float>(8.f * k, 8.f * k, 96.f * k, 22.f * k); g.setColour(Colour(0xff101018)); g.fillRoundedRectangle(chip, 5.f * k); g.setColour(gold); g.setFont(F(10.5f * k, true)); g.drawText("GR " + String(gr, 1) + " dB", chip, Justification::centred);
+        const float top = 44.f * k, bot = H - 30.f * k; auto Ygr = [&](float db) { return top + jlimit(0.f, 24.f, -db) / 24.f * (bot - top); }; auto Ylv = [&](float db) { return top + (jlimit(-80.f, 0.f, db)) / -80.f * (bot - top); };
+        g.setFont(F(10.f * k, true)); g.setColour(gold); for (int d = 0; d >= -24; d -= 6) g.drawText(String(d), Rectangle<float>(0.f, Ygr((float) d) - 7.f * k, 40.f * k, 14.f * k), Justification::centredRight);
+        { Rectangle<float> t(46.f * k, top, 20.f * k, bot - top); g.setColour(Colour(0xff12121a)); g.fillRoundedRectangle(t, 4.f * k);   // gain reduction bar (hangs from the top)
+          for (int d = -3; d > -24; d -= 3) { g.setColour(Colour(0xff23232f)); g.fillRect(t.getX(), Ygr((float) d), t.getWidth(), 1.f); }
+          const float y = Ygr(gr); ColourGradient cg(gold, 0.f, top, Colour(0xffff5d5d), 0.f, Ygr(-24.f), false); g.setGradientFill(cg); g.fillRoundedRectangle(t.withBottom(jmax(top + 1.f, y)), 4.f * k);
+          g.setColour(Colours::white); g.fillRect(t.getX(), Ygr(grMax), t.getWidth(), 1.6f * k);
+          g.setColour(Colour(0xff8c8c9c)); g.setFont(F(8.5f * k, true, 0.1f)); g.drawText("GR", Rectangle<float>(t.getX() - 6.f * k, bot + 6.f * k, t.getWidth() + 12.f * k, 14.f * k), Justification::centred); }
+        g.setColour(Colour(0xff5a5a6a)); g.setFont(F(10.5f * k)); for (int d : { -10, -30, -50, -70 }) g.drawText(String(d), Rectangle<float>(100.f * k, Ylv((float) d) - 7.f * k, 54.f * k, 14.f * k), Justification::centredRight);
+        auto bar = [&](float x, float level, float hold) {
+            Rectangle<float> t(x, top, 10.f * k, bot - top); g.setColour(Colour(0xff12121a)); g.fillRoundedRectangle(t, 5.f * k);
+            ColourGradient cg(Colour(0xffff5d5d), 0.f, Ylv(0.f), Colour(0xff5ee08a), 0.f, Ylv(-60.f), false); cg.addColour(0.35, gold); g.setGradientFill(cg);
+            const float y = Ylv(level); if (y < t.getBottom()) g.fillRoundedRectangle(t.withTop(y), 5.f * k);
+            g.setColour(Colours::white.withAlpha(0.9f)); g.fillRect(t.getX(), Ylv(hold), t.getWidth(), 1.3f * k); };
+        bar(166.f * k, in, inHold); bar(184.f * k, out, outHold);
+        g.setFont(F(9.5f * k, true)); g.setColour(inHold > 0.f ? Colour(0xffff5d5d) : cGreen); g.drawText(inHold <= -99.f ? "--" : String(inHold, 1), Rectangle<float>(150.f * k, bot + 6.f * k, 40.f * k, 16.f * k), Justification::centred);
+        g.setColour(outMode == 0 && outHold > 0.f ? Colour(0xffff5d5d) : gold); g.drawText(outText(), Rectangle<float>(188.f * k, bot + 6.f * k, 60.f * k, 16.f * k), Justification::centredLeft);
     }
 };
 

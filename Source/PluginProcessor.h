@@ -79,10 +79,10 @@ private:
     struct Prm {
         std::atomic<float> *mode{}, *thr{}, *ratio{}, *atk{}, *rel{}, *mix{}, *knee{}, *range{}, *hold{}, *look{}, *link{}, *inG{}, *outG{}, *autoGain{}, *autoRel{},
             *det{}, *chr{}, *drive{}, *os{}, *stMode{}, *procMid{}, *procSide{}, *syncOn{}, *syncRate{}, *syncOff{}, *syncPulse{},
-            *dry{}, *wetPan{}, *dryPan{}, *autoThr{}, *charPost{}, *lookOn{}, *scOn{}, *scExt{}, *scRoute{}, *scLevel{}, *scListen{}, *scInvert{}, *scEqOn{}, *eqBands{}, *mbOn{}, *mbBands{}, *mbX[3]{};
+            *dry{}, *clamp{}, *wetPan{}, *dryPan{}, *autoThr{}, *charPost{}, *lookOn{}, *scOn{}, *scExt{}, *scRoute{}, *scLevel{}, *scListen{}, *scInvert{}, *scEqOn{}, *eqBands{}, *mbOn{}, *mbBands{}, *mbX[3]{};
     } prm;
     struct EqP { std::atomic<float> *on{}, *type{}, *freq{}, *gain{}, *q{}, *slope{}, *ms{}; } eqP[rdp::kEqBands];
-    struct MbP { std::atomic<float> *thr{}, *ratio{}, *atk{}, *rel{}, *gain{}, *solo{}, *mute{}, *byp{}, *mode{}; } mbP[4];
+    struct MbP { std::atomic<float> *thr{}, *ratio{}, *atk{}, *rel{}, *gain{}, *solo{}, *mute{}, *byp{}, *mode{}, *ext{}; } mbP[4];
 
     void processChunk(juce::AudioBuffer<float>& main, int start, int n, int nCh, const float* const* sc, int scCh);
 

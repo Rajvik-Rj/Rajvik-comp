@@ -17,7 +17,7 @@ inline juce::Font font(float h, bool bold = false, float kern = 0.f) {
     return juce::Font(o);
 }
 inline float scaleOf(const juce::Component& c) {
-    if (auto* t = c.getTopLevelComponent()) return std::max(0.2f, (float) t->getWidth() / 1100.f);
+    if (auto* t = c.getTopLevelComponent()) return std::max(0.2f, (float) t->getWidth() / 1160.f);
     return 0.9f; }
 // font that is shrunk (never grown) so that `t` fits into maxW pixels - nothing is ever clipped, whatever the system font is
 inline juce::Font fitFont(const juce::String& t, float h, float maxW, bool bold = false, float kern = 0.f) {
@@ -285,55 +285,56 @@ public:
     }
     int numBands() const { return 2 + (int) ui::getP(apvts, "mbBands"); }
     void paint(juce::Graphics& g) override {
-        const float k = ui::scaleOf(*this); auto pr = plot();
+        const float k = ui::scaleOf(*this); auto pr = plot(); const juce::Colour gold(0xfff5c542), dimc(0xff8c8c9c);
+        g.fillAll(juce::Colour(0xff06060b));
         auto Y = [&](float db) { return pr.getY() + pr.getHeight() * (-std::clamp(db, -60.f, 0.f) / 60.f); };
-        g.setFont(ui::font(13.f * k));
-        for (int db = 0; db >= -60; db -= 6) {
-            g.setColour(ui::grid); g.drawHorizontalLine((int) Y((float) db), pr.getX(), pr.getRight());
-            if (db != 0) { g.setColour(ui::dim); g.drawText(juce::String(db), juce::Rectangle<float>(0.f, Y((float) db) - 8.f * k, 34.f * k, 16.f * k), juce::Justification::centredRight); }
+        g.setFont(ui::font(10.5f * k));
+        for (int db = 0; db >= -60; db -= 12) {
+            g.setColour(juce::Colour(0xff14141d)); g.fillRect(pr.getX(), Y((float) db), pr.getWidth(), 1.f);
+            g.setColour(dimc); g.drawText(juce::String(db), juce::Rectangle<float>(0.f, Y((float) db) - 8.f * k, 40.f * k, 16.f * k), juce::Justification::centredRight);
         }
         static const float fl[] = { 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000 };
         for (float f : fl) {
-            g.setColour(ui::grid); g.drawVerticalLine((int) fx(f), pr.getY(), pr.getBottom());
-            g.setColour(ui::dim); g.drawText(f >= 1000.f ? juce::String((int) (f / 1000.f)) + "k" : juce::String((int) f),
-                juce::Rectangle<float>(fx(f) - 20.f * k, pr.getBottom() + 4.f * k, 40.f * k, 16.f * k), juce::Justification::centred);
+            g.setColour(juce::Colour(0xff14141d)); g.fillRect(fx(f), pr.getY(), 1.f, pr.getHeight());
+            g.setColour(dimc); g.drawText(f >= 1000.f ? juce::String((int) (f / 1000.f)) + "k" : juce::String((int) f), juce::Rectangle<float>(fx(f) - 20.f * k, pr.getBottom() + 5.f * k, 40.f * k, 14.f * k), juce::Justification::centred);
         }
-        {   // input spectrum behind the band regions
-            juce::Path l, f; an.build(pr, [&](float dbv) { return Y(dbv + 30.f); }, l, f);
-            g.setColour(juce::Colour(0xffb7bfcd).withAlpha(0.12f)); g.fillPath(f); g.setColour(juce::Colour(0xffb7bfcd).withAlpha(0.6f)); g.strokePath(l, juce::PathStrokeType(1.2f * k));
+        {   // input spectrum (grey, like the analyzer of the single band view)
+            juce::Path l, f; an.build(pr, [&](float dbv) { return Y(dbv + 36.f); }, l, f);
+            g.setColour(juce::Colour(0xff3b3b4a).withAlpha(0.55f)); g.fillPath(f); g.setColour(juce::Colours::white.withAlpha(0.8f)); g.strokePath(l, juce::PathStrokeType(1.2f * k));
         }
-        const int n = numBands(); const auto xo = crossovers(n);
+        const int n = numBands(); const auto xo = crossovers(n); const bool extSig = proc.extPk.load() > 1e-5f;
         for (int b = 0; b < n; ++b) {
             const float xl = b == 0 ? pr.getX() : fx(xo[b - 1]), xr = b == n - 1 ? pr.getRight() : fx(xo[b]);
-            const auto col = ui::bandCol[b]; const bool selB = (b == sel);
-            const bool muted = ui::getP(apvts, "mbMute" + juce::String(b + 1)) > 0.5f, solo = ui::getP(apvts, "mbSolo" + juce::String(b + 1)) > 0.5f, byp = ui::getP(apvts, "mbByp" + juce::String(b + 1)) > 0.5f;
+            const auto col = ui::bandCol[b]; const bool selB = (b == sel); const juce::String id = juce::String(b + 1);
+            const bool muted = ui::getP(apvts, "mbMute" + id) > 0.5f, solo = ui::getP(apvts, "mbSolo" + id) > 0.5f, byp = ui::getP(apvts, "mbByp" + id) > 0.5f, ext = ui::getP(apvts, "mbExt" + id) > 0.5f;
             auto reg = juce::Rectangle<float>(xl, pr.getY(), xr - xl, pr.getHeight());
-            g.setGradientFill(juce::ColourGradient(col.withAlpha(selB ? 0.20f : 0.09f), 0.f, reg.getY(), col.withAlpha(selB ? 0.07f : 0.02f), 0.f, reg.getBottom(), false)); g.fillRect(reg);
-            // band input level
-            const float ly = Y(lvS[b]); g.setColour(col.withAlpha(muted ? 0.08f : 0.30f)); g.fillRect(reg.withTop(ly).reduced(2.f * k, 0.f));
-            g.setColour(col.withAlpha(muted ? 0.2f : 0.9f)); g.fillRect(juce::Rectangle<float>(reg.getX() + 2.f * k, ly, reg.getWidth() - 4.f * k, 1.5f * k));
-            // threshold line
-            const float thr = ui::getP(apvts, "mbThr" + juce::String(b + 1)), ty = Y(thr);
-            const float dash[] = { 5.f * k, 4.f * k }; g.setColour(col.withAlpha(byp ? 0.35f : 1.f));
-            g.drawDashedLine(juce::Line<float>(reg.getX() + 4.f * k, ty, reg.getRight() - 4.f * k, ty), dash, 2, 1.6f * k);
-            g.setFont(ui::font(12.f * k)); g.drawText(juce::String(thr, 1) + " dB", juce::Rectangle<float>(reg.getX() + 6.f * k, ty - 17.f * k, 70.f * k, 15.f * k), juce::Justification::centredLeft);
-            // gain reduction bar from the top
-            const float gh = std::min(std::fabs(grS[b]), 30.f) / 30.f * pr.getHeight() * 0.45f; auto bar = juce::Rectangle<float>(reg.getCentreX() - 16.f * k, pr.getY(), 32.f * k, gh);
-            g.setColour(ui::orange.withAlpha(0.85f)); g.fillRoundedRectangle(bar, 2.f * k);
-            g.setColour(ui::text); g.setFont(ui::font(13.f * k, true));
-            g.drawText(juce::String(grS[b], 1), juce::Rectangle<float>(reg.getCentreX() - 40.f * k, pr.getY() + gh + 2.f * k, 80.f * k, 16.f * k), juce::Justification::centred);
-            // band tag
+            g.setColour(col.withAlpha(selB ? 0.11f : 0.045f)); g.fillRect(reg); g.setColour(col.withAlpha(muted ? 0.25f : 0.9f)); g.fillRect(reg.withHeight(3.f * k));
+            // band input level (thin line)
+            const float ly = Y(lvS[b]); g.setColour(col.withAlpha(muted ? 0.2f : 0.85f)); g.fillRect(juce::Rectangle<float>(reg.getX() + 3.f * k, ly, reg.getWidth() - 6.f * k, 1.6f * k));
+            // threshold (draggable) + value chip
+            const float thr = ui::getP(apvts, "mbThr" + id), ty = Y(thr); const float dash[] = { 6.f * k, 4.f * k };
+            g.setColour(col.withAlpha(byp ? 0.35f : 1.f)); g.drawDashedLine(juce::Line<float>(reg.getX() + 3.f * k, ty, reg.getRight() - 3.f * k, ty), dash, 2, 1.5f * k);
+            auto chip = juce::Rectangle<float>(reg.getX() + 8.f * k, ty - 20.f * k, 62.f * k, 16.f * k); g.setColour(juce::Colour(0xff0f0f17)); g.fillRoundedRectangle(chip, 4.f * k); g.setColour(col); g.drawRoundedRectangle(chip, 4.f * k, 1.f);
+            g.setFont(ui::font(10.f * k, true)); g.drawText(juce::String(thr, 1) + " dB", chip, juce::Justification::centred);
+            // gain reduction hanging from the top
+            const float gh = std::min(std::fabs(grS[b]), 24.f) / 24.f * pr.getHeight() * 0.5f; auto bar = juce::Rectangle<float>(reg.getCentreX() - 14.f * k, pr.getY() + 3.f * k, 28.f * k, gh);
+            g.setGradientFill(juce::ColourGradient(col.withAlpha(0.95f), 0.f, bar.getY(), col.withAlpha(0.35f), 0.f, bar.getBottom() + 1.f, false)); g.fillRoundedRectangle(bar, 3.f * k);
+            g.setColour(juce::Colours::white); g.setFont(ui::font(12.f * k, true));
+            g.drawText(juce::String(grS[b], 1), juce::Rectangle<float>(reg.getCentreX() - 40.f * k, bar.getBottom() + 3.f * k, 80.f * k, 16.f * k), juce::Justification::centred);
+            // band tag: number, style, flags
             auto tag = juce::Rectangle<float>(reg.getX() + 8.f * k, pr.getBottom() - 28.f * k, 22.f * k, 22.f * k);
-            g.setColour(col.withAlpha(selB ? 1.f : 0.6f)); g.fillEllipse(tag); g.setColour(ui::bg); g.setFont(ui::font(13.f * k, true)); g.drawText(juce::String(b + 1), tag, juce::Justification::centred);
-            g.setColour(ui::text.withAlpha(0.8f)); g.setFont(ui::font(12.f * k));
-            juce::String flagTxt; if (solo) flagTxt << "S "; if (muted) flagTxt << "M "; if (byp) flagTxt << "BYP";
-            g.drawText(flagTxt, juce::Rectangle<float>(tag.getRight() + 4.f * k, tag.getY(), 90.f * k, tag.getHeight()), juce::Justification::centredLeft);
+            g.setColour(col.withAlpha(selB ? 1.f : 0.65f)); g.fillEllipse(tag); g.setColour(juce::Colour(0xff06060b)); g.setFont(ui::font(12.f * k, true)); g.drawText(id, tag, juce::Justification::centred);
+            const int mv = (int) ui::getP(apvts, "mbMode" + id); const int mi = mv == 0 ? (int) ui::getP(apvts, "mode") : mv - 1;
+            juce::String txt = juce::String(rdp::kModes[mi].name); if (solo) txt << "  S"; if (muted) txt << "  M"; if (byp) txt << "  BYP";
+            g.setColour(juce::Colours::white.withAlpha(0.8f)); g.setFont(ui::font(10.f * k)); g.drawText(txt, juce::Rectangle<float>(tag.getRight() + 5.f * k, tag.getY(), reg.getWidth() - 40.f * k, tag.getHeight()), juce::Justification::centredLeft);
+            if (ext) { auto ec = juce::Rectangle<float>(reg.getRight() - 62.f * k, pr.getBottom() - 26.f * k, 54.f * k, 18.f * k); const auto c = extSig ? juce::Colour(0xff5ee08a) : juce::Colour(0xffff5d5d);
+                g.setColour(c.withAlpha(0.18f)); g.fillRoundedRectangle(ec, 4.f * k); g.setColour(c); g.drawRoundedRectangle(ec, 4.f * k, 1.f); g.setFont(ui::font(9.5f * k, true)); g.drawText(extSig ? "EXT SC" : "EXT: none", ec, juce::Justification::centred); }
             if (selB) { g.setColour(col.withAlpha(0.7f)); g.drawRect(reg.reduced(0.5f), 1.f); }
         }
         for (int j = 0; j < n - 1; ++j) {   // crossover handles
-            const float x = fx(xo[j]); g.setColour(ui::text.withAlpha(0.75f)); g.drawVerticalLine((int) x, pr.getY(), pr.getBottom());
-            g.setColour(ui::text); g.fillEllipse(x - 5.f * k, pr.getCentreY() - 5.f * k, 10.f * k, 10.f * k);
-            g.setFont(ui::font(12.f * k)); g.drawText(rdp::freqText(xo[j]), juce::Rectangle<float>(x - 40.f * k, pr.getBottom() - 54.f * k, 80.f * k, 16.f * k), juce::Justification::centred);
+            const float x = fx(xo[j]); g.setColour(juce::Colours::white.withAlpha(0.45f)); g.fillRect(x - 0.5f, pr.getY(), 1.f, pr.getHeight());
+            auto h = juce::Rectangle<float>(x - 5.f * k, pr.getCentreY() - 14.f * k, 10.f * k, 28.f * k); g.setColour(juce::Colour(0xffe9e9f0)); g.fillRoundedRectangle(h, 5.f * k);
+            auto fc = juce::Rectangle<float>(x - 34.f * k, pr.getY() - 21.f * k, 68.f * k, 16.f * k); g.setColour(juce::Colour(0xff0f0f17)); g.fillRoundedRectangle(fc, 4.f * k); g.setColour(juce::Colour(0xffe9e9f0)); g.setFont(ui::font(10.f * k, true)); g.drawText(rdp::freqText(xo[j]), fc, juce::Justification::centred);
         }
     }
     void mouseDown(const juce::MouseEvent& e) override {
@@ -363,7 +364,7 @@ public:
         dragXo = dragThr = -1;
     }
 private:
-    juce::Rectangle<float> plot() const { const float k = ui::scaleOf(*this); return { 44.f * k, 40.f * k, (float) getWidth() - 62.f * k, 262.f * k }; }
+    juce::Rectangle<float> plot() const { const float k = ui::scaleOf(*this); return { 46.f * k, 54.f * k, (float) getWidth() - 64.f * k, (float) getHeight() - 84.f * k }; }
     float fx(float f) const { auto pr = plot(); return pr.getX() + std::log(f / 20.f) / std::log(1000.f) * pr.getWidth(); }
     float xToF(float x) const { auto pr = plot(); return 20.f * std::pow(1000.f, std::clamp((x - pr.getX()) / pr.getWidth(), 0.f, 1.f)); }
     std::array<float, 3> crossovers(int n) const {   // same ordering rule as the DSP so the display always matches what you hear

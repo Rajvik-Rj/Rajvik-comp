@@ -18,9 +18,12 @@ private:
     using SA = juce::AudioProcessorValueTreeState;
     void timerCallback() override;
     void bindMainKnobs(); void bindBandControls(); void bindEqBand(); void onBandSelected(); void onEqSelected(); void applyModeLayout(); void applyLayoutVisibility();
-    void showSettings(); void closeOverlays(); void showGuiMenu(); static juce::File sizeFile(); static int loadDefaultW(); void showPresets(); void promptSave(); void stepPreset(int dir); void setTrigger(int t); int triggerNow() const;
-    void registerHints(); void setScalePercent(int pct); float canvasH() const { return scOpen ? 920.f : 660.f; }
-    float k() const { return (float) getWidth() / 1100.f; }
+    void showSettings(); void showGuiMenu(); void closeOverlays(); static juce::File sizeFile(); static int loadDefaultW();
+    void showPresets(); void promptSave(); void stepPreset(int dir); void setTrigger(int t); int triggerNow() const; void toggleEnlarge();
+    void registerHints(); void setScalePercent(int pct);
+    float scH() const { return scOpen ? 210.f : 28.f; }
+    float canvasH() const { return 674.f + scH(); }
+    float k() const { return (float) getWidth() / 1160.f; }
     juce::Rectangle<int> Ri(float x, float y, float w, float h) const { return juce::Rectangle<float>(x * k(), y * k(), w * k(), h * k()).toNearestInt(); }
 
     RajvikProcessor& proc; RajvikLnF lnf;
@@ -28,27 +31,28 @@ private:
     juce::String presetName{ "Default Preset" }, hint;
 
     // header
-    ui::IconButton guiBtn{ "gear" }, undoBtn{ "undo" }, redoBtn{ "redo" }, prevBtn{ "prev" }, nextBtn{ "next" }, fullBtn{ "fullscreen" };
-    ui::TextLinkButton abBtn{ "A / B" }, copyBtn{ "Copy" }, helpBtn{ "Help" }, presetBtn{ "Default Preset" };
-    // display
-    pro::ProDisplay display; pro::KneePanel kneePanel; MultibandDisplay mbDisplay; pro::ProMeter meter;
+    pro::BoxButton undoBtn{ "Undo" }, redoBtn{ "Redo" }, aBtn{ "A" }, bBtn{ "B" }, copyBtn{ "Copy" }, detBtn{ "Peak" }, prevBtn{ "<" }, nextBtn{ ">" }, presetBtn{ "Default Preset" }, saveBtn{ "Save" }, toolsBtn{ "Tools" };
+    ui::IconButton guiBtn{ "gear" };
+    // main view
+    pro::ProDisplay display; MultibandDisplay mbDisplay; pro::ProMeter meter;
+    pro::BoxButton extBtn{ "Ext SC" }; std::unique_ptr<SA::ButtonAttachment> extA;
     juce::TextButton bandBtn[4]; juce::TextButton soloBtn{ "S" }, muteBtn{ "M" }, bypBtn{ "Byp" }; juce::ComboBox bandsBox; juce::Slider bandGain{ juce::Slider::LinearHorizontal, juce::Slider::TextBoxRight };
-    // knobs
-    pro::ProKnob thr, ratio, atk, rel, gain, dry; pro::CurveSlider knee, range, look, hold;
-    pro::PillButton stylePill; std::unique_ptr<juce::Button> charIcon, scToggle; pro::CharacterPanel charPanel;
+    // control cards
+    pro::BoxButton stylePill{ "Clean" }, autoThrBtn{ "AUTO THR" }, autoRelBtn{ "AUTO REL" }, autoGainBtn{ "AUTO GAIN" }, charBtn{ "Tube" };
+    pro::ProKnob thr, ratio, atk, rel, gain, mixK; pro::CurveSlider knee, range, look, hold, dryG, wetMS, dryMS;
+    pro::CharacterPanel charPanel;
+    // side chain (top)
+    std::unique_ptr<juce::Button> scToggle;
+    pro::BoxButton trig[4] = { pro::BoxButton("Internal"), pro::BoxButton("External"), pro::BoxButton("MIDI"), pro::BoxButton("Tempo") };
+    pro::BoxButton eqOnBtn{ "EQ" }, listenBtn{ "Listen" }, scOnBtn{ "SC On" }, invertBtn{ "Invert" }, midBtn{ "Mid" }, sideBtn{ "Side" };
+    pro::CurveSlider scLevelSl, linkSl; juce::ComboBox routeBox, eqBandsBox; EqGraph eqGraph;
+    juce::ComboBox bTypeBox, bSlopeBox, bChBox; pro::DragValue bFreq, bGain, bQ; pro::BoxButton bOn{ "ON" };
     // status bar
-    std::unique_ptr<juce::Button> midiItem, osItem, lookItem, detItem; pro::ProKnob mbMix; juce::TextButton mbBtn{ "Multiband" }; pro::DragValue mixV, inV, outV; ui::IconButton gearBtn{ "gear" };
-    // side chain panel
-    ui::IconButton listenBtn{ "phones" }; pro::PillButton trig[4] = { pro::PillButton("INTERNAL"), pro::PillButton("EXTERNAL"), pro::PillButton("MIDI"), pro::PillButton("TEMPO") };
-    pro::DragValue scLevelV; pro::ProKnob wetPan, dryPan; pro::Segmented stereoSeg; double lastWet = 0; pro::VSlider scLevelSl; pro::ProKnob linkKnob;
-    pro::PillButton stereoPill, midBtn{ "M" }, sideBtn{ "S" }, invertBtn{ "INVERT" }, peakBtn{ "PEAK" }, rmsBtn{ "RMS" }, scOnBtn{ "SC ON" }, eqOnBtn{ "EQ" };
-    juce::ComboBox routeBox, eqBandsBox;
-    EqGraph eqGraph;
-    juce::ComboBox bTypeBox, bSlopeBox, bChBox; pro::DragValue bFreq, bGain, bQ; pro::PillButton bOn;
+    pro::BoxButton osBtn{ "Oversampling  Off" }, midiBtn{ "MIDI Learn" }, modeBtn{ "Mode  L / R" }, mbBtn{ "Multiband" }; pro::DragValue inV; juce::String latencyText;
 
     std::unique_ptr<SA::ComboBoxAttachment> bandsA, routeA, eqBandsA, bTypeA, bSlopeA, bChA;
-    std::unique_ptr<SA::ButtonAttachment> listenA, invertA, midA, sideA, soloA, muteA, bypA, scOnA, eqOnA, bOnA;
-    std::unique_ptr<SA::SliderAttachment> bandGainA, scLevelA;
+    std::unique_ptr<SA::ButtonAttachment> listenA, invertA, midA, sideA, soloA, muteA, bypA, scOnA, bOnA, autoThrA, autoRelA, autoGainA;
+    std::unique_ptr<SA::SliderAttachment> bandGainA;
     std::vector<std::pair<juce::Component*, juce::String>> hints;
     float scRing = -100.f, extSm = 0.f; juce::Component::SafePointer<juce::Component> openBox, openAlert;
 };

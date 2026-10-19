@@ -39,6 +39,7 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     addF("dry", "Dry Gain", NR(-60.f, 12.f, 0.1f), -60.f, " dB");  // dry level for parallel compression (-60 = off)
     addF("wetPan", "Wet Pan", NR(-100.f, 100.f, 1.f), 0.f, " %", 0);   // Mid/Side mode: -100 = Mid only, +100 = Side only
     addF("dryPan", "Dry Pan", NR(-100.f, 100.f, 1.f), 0.f, " %", 0);
+    addF("clamp", "Clamp", NR(0.f, 100.f, 1.f), 0.f, " %", 0);      // presses down transients that slipped through the attack stage
     addB("autoThr", "Auto Threshold", false);                      // threshold follows the signal level
     addB("charPost", "Character Post", true);                      // true = saturation after compression, false = before
     addB("lookOn", "Lookahead On", true);
@@ -100,6 +101,7 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
         addF("mbRel" + n, nm + "Release", skew(1.f, 5000.f, 150.f), relDef[b], " ms");
         addF("mbGain" + n, nm + "Gain", NR(-18.f, 18.f, 0.1f), 0.f, " dB");
         { juce::StringArray sl; sl.add("Main style"); sl.addArray(modes); addC("mbMode" + n, nm + "Style", sl, 0); }   // each band can use its own compressor style
+        addB("mbExt" + n, nm + "External Side Chain", false);
         addB("mbSolo" + n, nm + "Solo", false);
         addB("mbMute" + n, nm + "Mute", false);
         addB("mbByp" + n, nm + "Bypass", false);
