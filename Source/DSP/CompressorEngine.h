@@ -6,6 +6,7 @@ struct EngineParams {
     int mode = 0;          // index into kModes
     int detector = 0;      // 0 = mode default, 1 = peak, 2 = RMS
     bool autoRelease = false;
+    float clamp = 0;       // 0..1: how much of the transient that slipped through the attack stage is pressed down again
     bool operator==(const EngineParams&) const = default;
 };
 
@@ -30,11 +31,16 @@ public:
         float lvl[2] = { -120.f, -120.f };
         for (int c = 0; c < n; ++c) {
             auto& s = det[c];
-            const float x = std::isfinite(in[c]) ? in[c] : 0.f, a = std::fabs(x);
-            float amp = a;
+            const float x = std::isfinite(in[c]) ? in[c] : 0.f;
+            const float a = std::fabs(x);
+            // Ripple guard: hold the peak for ~a half period of the lowest note (<= 25 ms) before it may fall, so the detector
+            // does not follow the rectified waveform of bass notes (that ripple is what turns into low-frequency distortion).
+            if (guardSamp == 0) s.hv = a;
+            else if (a >= s.hv) { s.hv = a; s.hc = guardSamp; } else if (s.hc > 0) --s.hc; else s.hv = std::max(a, s.hv * guardDecay);
+            float amp = s.hv;
             if (useRms) {
                 s.pw = flush(rmsCoef * s.pw + (1.f - rmsCoef) * x * x);
-                amp = rmsMix * std::sqrt(2.f * s.pw) + (1.f - rmsMix) * a;   // sqrt(2 * mean-square): a sine reads its peak value
+                amp = rmsMix * std::sqrt(2.f * s.pw) + (1.f - rmsMix) * s.hv;   // sqrt(2 * mean-square): a sine reads its peak value
             }
             if (prof->adaptive) {   // crest-factor tracking (fast peak envelope vs slow RMS)
                 s.pk = std::max(a, pkCoef * s.pk); s.cp = flush(crestCoef * s.cp + (1.f - crestCoef) * x * x);
@@ -59,7 +65,7 @@ public:
     const ModeProfile& profile() const noexcept { return *prof; }
     float effectiveKnee() const noexcept { return knee; }
 private:
-    struct Det { float pw = 0, pk = 0, cp = 0; };
+    struct Det { float pw = 0, pk = 0, cp = 0, hv = 0; int hc = 0; };
     struct Gn  { float y1f = 0, y1s = 0, y = 0, avg = 0; int hold = 0; };
 
     // 1.0 = nominal. Versatile: transient material -> faster, dense material -> slower.
@@ -98,7 +104,9 @@ private:
 
         s.avg = avgC * s.avg + (1.f - avgC) * std::fabs(s.y);
         s.y = flush(s.y); s.y1f = flush(s.y1f); s.y1s = flush(s.y1s); s.avg = flush(s.avg);
-        return -s.y;
+        float out = s.y;
+        if (params.clamp > 0.f && y1 > out) out += params.clamp * (y1 - out);          // Clamp: press down what the attack stage let through
+        return -out;
     }
     void recompute() {
         cachedSr = sampleRate;
@@ -112,10 +120,12 @@ private:
         relBaseS = std::max(params.relMs * sm, relBaseF); relS = tcCoef(relBaseS, sampleRate);
         float rmsMs = prof->rmsMs; rmsMix = prof->rmsMix;
         if (params.detector == 1) rmsMs = 0; else if (params.detector == 2 && rmsMs <= 0) { rmsMs = 10; rmsMix = 1.f; }
+        if (rmsMs > 0.f) rmsMs = std::max(rmsMs, 12.f);   // shorter windows follow the ripple of bass notes
         useRms = rmsMs > 0.f; rmsCoef = useRms ? tcCoef(rmsMs, sampleRate) : 0.f;
         knee = std::clamp(params.kneeDb + prof->kneeAdd, 0.f, 72.f);
         holdSamp = (int) ((params.holdMs + prof->holdMs) * 0.001 * sampleRate);
         avgC = tcCoef(prof->slowAmt > 0.9f ? 600.f : 350.f, sampleRate);
+        guardSamp = prof->slewRelease ? 0 : (int) (std::clamp(relBaseF * 0.25f, 3.f, 25.f) * 0.001 * sampleRate);   // slew styles already hold via their Hold time guardDecay = tcCoef(2.5f, sampleRate);
         pkCoef = tcCoef(60.f, sampleRate); crestCoef = tcCoef(150.f, sampleRate);
         slewStep = 24.f / std::max(1.f, relBaseF * 0.001f * (float) sampleRate);
     }
@@ -124,6 +134,6 @@ private:
     Det det[2]; Gn gn[2];
     float atkBase = 10, atkC = 0, relBaseF = 100, relBaseS = 300, relF = 0, relS = 0, slowAmt = 0, rmsCoef = 0, rmsMix = 0, knee = 6, avgC = 0, slewStep = 0,
           pkCoef = 0, crestCoef = 0, lastGain = 0;
-    int holdSamp = 0; bool useRms = false, twoStage = false;
+    int holdSamp = 0, guardSamp = 0; float guardDecay = 0; bool useRms = false, twoStage = false;
 };
 } // namespace rdp

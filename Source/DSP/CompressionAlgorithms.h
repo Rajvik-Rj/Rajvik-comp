@@ -21,7 +21,7 @@ struct ModeProfile {
     Kind kind; float holdMs;
     float defThr, defRatio, defAtk, defRel, defKnee;
 };
-inline constexpr int kNumModes = 14;
+inline constexpr int kNumModes = 19;
 inline const ModeProfile kModes[kNumModes] = {
  //  name        description                                         atk  rel  knee  rms  mix   fb     slew   vari   adapt  slowM slowA kind              hold   thr  ratio atk  rel  knee
  {"Clean",     "Transparent, low-distortion feed-forward",         1.0f,1.0f, 3.f,  5.f,0.5f, false,false,false,false, 3.0f,0.25f,Kind::Downward,  0.f, -18.f,3.f,  10.f,120.f, 4.f},
@@ -38,5 +38,10 @@ inline const ModeProfile kModes[kNumModes] = {
  {"TTM",       "Downward above threshold + upward 24 dB below",    1.0f,1.2f, 6.f, 10.f,0.6f, false,false,false,false, 2.5f,0.40f,Kind::Combined,  0.f, -20.f,3.f,  15.f,180.f, 6.f},
  {"Op-El",     "Opto/electro feedback hybrid",                     1.5f,0.6f,10.f, 20.f,0.8f, true, false,false,false, 4.0f,0.70f,Kind::Downward,  0.f, -22.f,3.f,  15.f,250.f, 6.f},
  {"Vari-Mu",   "Ratio increases with gain reduction",              1.8f,1.0f,12.f, 15.f,0.6f, true, false,true, false, 3.0f,0.50f,Kind::Downward,  0.f, -20.f,3.f,  25.f,300.f, 8.f},
+ {"FET",       "Fast, aggressive peak feedback (1176-style)",       0.25f,0.6f,0.f,  0.f,0.0f, true, false,false,false, 6.0f,0.50f,Kind::Downward,  0.f, -18.f,4.f,  0.4f,150.f, 0.f},
+ {"SSL Bus",   "VCA bus glue with fast-auto release (SSL-style)",   1.0f,1.0f, 3.f, 15.f,0.4f, false,false,false,false, 4.0f,0.60f,Kind::Downward,  0.f, -14.f,4.f,  10.f,300.f, 3.f},
+ {"VCA",       "Hard-knee RMS, constant-slope release (dbx-style)", 1.0f,1.0f, 0.f, 15.f,1.0f, false,true, false,false, 0.0f,0.00f,Kind::Downward, 25.f, -16.f,4.f,  15.f,200.f, 0.f},
+ {"Diode Bridge","Soft knee, program-dependent (Neve-style)",       1.2f,1.0f, 8.f, 10.f,0.3f, false,false,false,false, 5.0f,0.60f,Kind::Downward,  0.f, -18.f,3.f,  15.f,250.f, 8.f},
+ {"Tube Opto", "Slow optical cell with long-memory release",       2.5f,0.4f,14.f, 40.f,1.0f, false,false,false,false,12.0f,1.00f,Kind::Downward,  0.f, -24.f,3.f,  15.f,200.f,10.f},
 };
 } // namespace rdp
