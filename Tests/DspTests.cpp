@@ -1,3 +1,5 @@
+#include <complex>
+#include <vector>
 // JUCE-free DSP unit tests.  Build: cmake --build build --target DspTests && ctest
 #include "../Source/DSP/CompressorEngine.h"
 #include "../Source/DSP/SidechainEQ.h"
@@ -138,7 +140,7 @@ int main() {
         for (int i = 0; i < 96000; ++i) {
             const float lo = 0.5f * std::sin(6.2831853f * 80.f * i / 48000.f), hi = 0.01f * std::sin(6.2831853f * 5000.f * i / 48000.f);
             const float x[2] = { lo + hi, lo + hi }, d[2] = { x[0], x[1] }; float w[2], l[2];
-            mb.process(x, d, 2, true, act, w, l);
+            mb.process(x, d, nullptr, 2, true, act, w, l);
             grLo = mb.grDb(0); grHi = mb.grDb(2);
         }
         CHECK(grLo < -12.f, "multiband: band 1 compresses its loud 80 Hz tone");
@@ -147,21 +149,37 @@ int main() {
     {   // solo / mute / bypass / mono / silence
         MultibandEngine mb; mb.prepare(sr); const float xo[3] = { 150.f, 1500.f, 6000.f }; EngineParams base; BandSettings bs[4]; for (auto& b : bs) { b.thr = 0.f; b.ratio = 1.f; }
         const bool act[2] = { true, true };
-        auto rmsAt = [&](float f) { mb.reset(); double a = 0; for (int i = 0; i < 48000; ++i) { const float v = 0.25f * std::sin(6.2831853f * f * i / 48000.f), x[2] = { v, v }; float w[2], l[2]; mb.process(x, x, 2, true, act, w, l); if (i > 24000) a += (double) w[0] * w[0]; } return std::sqrt(a / 23999); };
+        auto rmsAt = [&](float f) { mb.reset(); double a = 0; for (int i = 0; i < 48000; ++i) { const float v = 0.25f * std::sin(6.2831853f * f * i / 48000.f), x[2] = { v, v }; float w[2], l[2]; mb.process(x, x, nullptr, 2, true, act, w, l); if (i > 24000) a += (double) w[0] * w[0]; } return std::sqrt(a / 23999); };
         mb.setup(4, xo, base, bs); const double ref = rmsAt(5000.f);
         bs[1].solo = true; mb.setup(4, xo, base, bs); CHECK(rmsAt(5000.f) < ref * 0.03 && rmsAt(500.f) > ref * 0.8, "solo band 2 isolates 150 Hz - 1.5 kHz");
         bs[1].solo = false; bs[2].mute = true; mb.setup(4, xo, base, bs); CHECK(rmsAt(3000.f) < ref * 0.18 && rmsAt(500.f) > ref * 0.9 && rmsAt(15000.f) > ref * 0.9, "mute band 3 removes ~1.5 - 6 kHz (>15 dB at 3 kHz), others untouched");
         bs[2].mute = false; bs[0].gainDb = 6.f; mb.setup(4, xo, base, bs); { const double r = rmsAt(50.f); CHECK(std::fabs(20 * std::log10(r / ref) - 6.f) < 0.5f, "band make-up gain +6 dB"); }
         bs[0].gainDb = 0.f; bs[0].thr = -40.f; bs[0].ratio = 10.f; bs[0].bypass = true; mb.setup(4, xo, base, bs);
         { const double r = rmsAt(50.f); CHECK(std::fabs(20 * std::log10(r / ref)) < 0.3f, "band bypass -> no compression"); }
-        mb.reset(); bool ok = true; float z[2] = { 0, 0 }, w[2], l[2]; for (int i = 0; i < 48000; ++i) { mb.process(z, z, 2, true, act, w, l); if (!std::isfinite(w[0]) || std::fabs(w[0]) > 1e-6f) ok = false; }
+        mb.reset(); bool ok = true; float z[2] = { 0, 0 }, w[2], l[2]; for (int i = 0; i < 48000; ++i) { mb.process(z, z, nullptr, 2, true, act, w, l); if (!std::isfinite(w[0]) || std::fabs(w[0]) > 1e-6f) ok = false; }
         CHECK(ok, "multiband: silence -> silence, no NaN");
         bs[0].bypass = false; mb.setup(3, xo, base, bs); const bool act1[2] = { true, false }; float x1[1] = { 0.3f }; ok = true;
-        for (int i = 0; i < 4800; ++i) { mb.process(x1, x1, 1, true, act1, w, l); if (!std::isfinite(w[0])) ok = false; } CHECK(ok, "multiband: mono / 3 bands runs");
+        for (int i = 0; i < 4800; ++i) { mb.process(x1, x1, nullptr, 1, true, act1, w, l); if (!std::isfinite(w[0])) ok = false; } CHECK(ok, "multiband: mono / 3 bands runs");
         // crossovers dragged out of order are repaired (no NaN, still flat)
         const float bad[3] = { 5000.f, 200.f, 100.f }; bs[0].thr = 0; bs[0].ratio = 1; mb.setup(4, bad, base, bs); ok = true;
-        for (int i = 0; i < 9600; ++i) { const float v = 0.25f * std::sin(6.2831853f * 1000.f * i / 48000.f), x[2] = { v, v }; mb.process(x, x, 2, true, act, w, l); if (!std::isfinite(w[0])) ok = false; }
+        for (int i = 0; i < 9600; ++i) { const float v = 0.25f * std::sin(6.2831853f * 1000.f * i / 48000.f), x[2] = { v, v }; mb.process(x, x, nullptr, 2, true, act, w, l); if (!std::isfinite(w[0])) ok = false; }
         CHECK(ok, "multiband: out-of-order crossover settings are sanitised"); }
+    {   // per-band external side chain: band 0 listens to a loud external signal -> its quiet audio gets compressed; without e nothing happens
+        MultibandEngine mb; mb.prepare(48000); float xo[1] = { 1000.f }; BandSettings bs[2]; for (auto& b : bs) { b.thr = -30; b.ratio = 8; b.atk = 1; b.rel = 50; }
+        bs[0].ext = true; EngineParams ep; mb.setup(2, xo, ep, bs); const bool act[2] = { true, true };
+        auto run = [&](bool withExt) { mb.reset(); double a = 0; for (int i = 0; i < 48000; ++i) { const float v = 0.02f * std::sin(6.2831853f * 100.f * i / 48000.f), l = 0.6f * std::sin(6.2831853f * 100.f * i / 48000.f);
+            const float x[2] = { v, v }, e[2] = { l, l }; float w[2], li[2]; mb.process(x, x, withExt ? e : nullptr, 2, true, act, w, li); if (i > 24000) a += (double) w[0] * w[0]; } return std::sqrt(a / 23999); };
+        const double with = run(true), without = run(false); CHECK(with < without * 0.5, "multiband: per-band external side chain triggers only that band"); }
+    {   // Clamp: with a slow attack the transient leaks through; Clamp presses it down again
+        auto gainAt = [&](float clampAmt) { CompressorEngine e; e.prepare(48000); EngineParams p; p.mode = 0; p.thrDb = -30; p.ratio = 8; p.atkMs = 40; p.relMs = 100; p.clamp = clampAmt; e.setParams(p);
+            float g = 1.f; for (int i = 0; i < 480; ++i) { float x = 0.6f * std::sin(6.2831853f * 1000.f * i / 48000.f); e.process(&x, 1, &g); } return linToDb(g); };
+        CHECK(gainAt(1.f) < gainAt(0.f) - 3.f, "compressor: Clamp recompresses transients that leak through a slow attack"); }
+    {   // distortion regression: a 60 Hz sine through heavy compression must stay clean
+        CompressorEngine e; e.prepare(48000); EngineParams p; p.mode = 0; p.thrDb = -30; p.ratio = 4; p.atkMs = 10; p.relMs = 100; e.setParams(p);
+        std::vector<float> y; for (int i = 0; i < 192000; ++i) { float x = 0.4f * std::sin(6.2831853f * 60.f * i / 48000.f), g; e.process(&x, 1, &g); if (i > 96000) y.push_back(x * g); }
+        auto bin = [&](double f) { std::complex<double> s = 0; for (size_t i = 0; i < y.size(); ++i) { const double w = 0.5 - 0.5 * std::cos(6.2831853 * (double) i / (double) (y.size() - 1)); s += w * y[i] * std::polar(1.0, -6.2831853 * f * (double) i / 48000.0); } return std::abs(s); };
+        double h = 0; for (int k = 2; k <= 9; ++k) { const double b = bin(60.0 * k); h += b * b; }
+        CHECK(20 * std::log10(std::sqrt(h) / bin(60.0)) < -65.0, "compressor: 60 Hz harmonic distortion below -65 dB"); }
     std::printf(fails ? "\n%d FAILED\n" : "\nALL PASSED\n", fails);
     return fails ? 1 : 0;
 }
