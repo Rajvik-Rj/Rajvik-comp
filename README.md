@@ -81,3 +81,16 @@ All-pass band + 96 dB brickwall slope, per-band Stereo/Mid/Side.
 **Not done:** immersive/surround (stereo/mono only), AU/CLAP/AAX formats, Instance List (needs the other vendor's plug-ins).
 Screenshot tool: `cmake -B build -DRDP_BUILD_SHOT=ON` then `xvfb-run build/RdpShot_artefacts/Release/RdpShot outdir`.
 The plug-in now compiles on Linux (JUCE 8.0.6, GCC 13); not yet loaded in a DAW.
+
+## UI v3 ("Midnight Gold" style)
+Black / gold layout: header (Undo, Redo, A/B, Copy, Detector, preset browser, Save, Tools, GUI size), side chain strip on top (click to open the EQ),
+dB-scaled waveform with the threshold and knee drawn on it (grey = untouched, gold = removed by the compressor, white line = output), knee/threshold curve panel on the left,
+GR + level meter, a card with Style + 6 knobs, a card with flat sliders (Knee, Range, Lookahead, Hold, Dry gain, Wet / Dry Mid-Side or Left-Right balance), status bar.
+Wet / Dry balance: slide toward Mid (Left) or Side (Right) to boost that part by up to +6 dB. Mix (0-100 %) is the overall dry/wet after everything.
+
+## Compressor core v2
+- Ripple guard in the detector (peak is held ~a half period of the lowest note) and a 12 ms floor for the RMS window: low-frequency harmonic distortion dropped from about -47..-54 dB to below -69 dB for every style at 40 Hz (see Tests/ThdTest.cpp; whole plug-in chain measured with `RdpShot <dir> thd`).
+- 5 new styles: FET, SSL Bus, VCA, Diode Bridge, Tube Opto (19 in total). They are models built from the known behaviour of those designs (attack / release curves, detector, knee, feedback vs feed-forward) - not circuit emulations, and not matched against hardware measurements.
+- Multiband: every band has its own style and its own "Ext SC" switch (external side chain split into the same bands).
+- Clamp (Tools > Clamp): presses down the part of a transient that slipped through the attack stage (0 % = off). Tested in Tests/DspTests.cpp.
+- Tried and rejected (measured, no benefit): ADAA on the detector rectifier and rounding the gain corners - the gain stage already keeps the high-frequency skirt below -90 dB, and ADAA added up to 2 dB level error at 16 kHz.
